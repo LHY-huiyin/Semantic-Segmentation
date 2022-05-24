@@ -1,0 +1,11 @@
+(cv2) pip install opencv-contrib-python
+(torch) conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+(apex) pip install dir('X:\luo\apex-master')
+pip install tensorboardX
+pip install pycocotools
+pip install tqdm
+tensorboard 
+
+conda create --name luohuiyin python=3.8(建议直接去anaconda里面创建环境)
+activate luohuiyin
+
