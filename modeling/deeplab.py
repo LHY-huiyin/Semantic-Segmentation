@@ -307,7 +307,7 @@ class DeepLab(nn.Module):
                 m.eval()
 
     def get_1x_lr_params(self):
-        modules = [self.backbone]
+        modules = [self.backbone]  # ResNet((conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2),
         for i in range(len(modules)):
             for m in modules[i].named_modules():
                 if self.freeze_bn:  # freeze_bn=false

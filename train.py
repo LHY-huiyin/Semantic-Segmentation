@@ -15,7 +15,7 @@ from modeling.sync_batchnorm.replicate import patch_replication_callback
 from modeling.deeplab import *
 from modeling.EaNet import *
 from modeling.deeplab_unet.DeeplabUnet import *
-from modeling.unet import UNet
+from modeling.unet.unet_d import UNet
 from utils.loss import SegmentationLosses, ECELoss
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
@@ -57,16 +57,18 @@ class Trainer(object):
         # model = DeepLab_EaNet(backbone=args.backbone, output_stride=args.out_stride)
         # model = DeeplabUnet(backbone=args.backbone, output_stride=args.out_stride)
         # 获得图片的通道数
-        n_channels = 3
-        model = UNet(n_channels, n_classes=self.nclass)
+        model = UNet(backbone=args.backbone, num_classes=self.nclass)
 
         # 构建一个优化参数列表
-        train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
-                        {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]  # train_params[0]:args.lr = 0.035
+        # train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
+        #                 {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]  # train_params[0]:args.lr = 0.035
 
         # Define Optimizer  ******优化器***** 是算一个batch计算一次梯度，然后进行一次梯度更新
-        optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
+        # optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
+        #                             weight_decay=args.weight_decay, nesterov=args.nesterov)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=args.momentum,
                                     weight_decay=args.weight_decay, nesterov=args.nesterov)
+
         # 随机梯度下降SGD：nesterov具有预测能力，
         # momentum=0.9 综合考虑了梯度下降的方向和上次更新的方向  weight_decay=0.0005 nesterov=false
         # params(iterable)：可用于迭代优化的参数或者定义参数组的dicts。
@@ -298,8 +300,8 @@ def main():
     parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")  # 创建解析器
     # ArgumentParser:对象包含将命令行解析成 Python 数据类型所需的全部信息。 description：在参数帮助文档之前显示的文本
     # 给一个 ArgumentParser 添加程序参数信息是通过调用 add_argument() 方法完成的
-    parser.add_argument('--backbone', type=str, default='resnet',
-                        choices=['resnet', 'xception', 'drn', 'mobilenet', 'ghostnet'],
+    parser.add_argument('--backbone', type=str, default='unet',
+                        choices=['resnet', 'xception', 'drn', 'mobilenet', 'ghostnet', 'unet'],
                         help='backbone name (default: resnet)')  # 主干网络，用来做特征提取的网络，代表网络的一部分，一般是用于前端提取图片信息，生成特征图feature map,供后面的网络使用。
     parser.add_argument('--out-stride', type=int, default=16,
                         help='network output stride (default: 8)')  # 步长
@@ -329,7 +331,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=4,   # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=12,   # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
