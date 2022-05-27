@@ -143,6 +143,20 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, input):  # 16倍
+        x = self.conv1(input)  # [1,3,513,513]-[1,64,256,256]
+        x = self.bn1(x)  # [1,64,256,256]
+        x = self.relu(x)
+        x = self.maxpool(x)  # [1,64,256,256]-[1,64,128,128]
+
+        x = self.layer1(x)  # [1,64,128,128]-[1,256,128,128]
+        low_level_feat = x
+        x = self.layer2(x)  # [1,256,128,128]-[1,512,64,64]
+        x = self.layer3(x)  # [1,512,64,64]-[1,1024,32,32]
+        x = self.layer4(x)  # [1,1024,32,32]-[1,2048,32,32]
+        return x, low_level_feat
+
+    """Unet
+    def forward(self, input):  # 16倍
         #  print('input2', input) 此处的值为传入值
         feat2 = self.conv1(input)  # [4,3,513,513]-[4,64,256,256]
         feat2 = self.bn1(feat2)  # [4,64,256,256]
@@ -156,6 +170,7 @@ class ResNet(nn.Module):
         feat32 = self.layer4(feat16)  # [4,1024,32,32]-[4,2048,32,32]
 
         return feat2, feat4, feat8, feat16, feat32  # (384->192)->96->48->24
+    """
 
     """EaNet
     def forward(self, input):  # 16倍

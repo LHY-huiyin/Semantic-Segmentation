@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import cv2
 import time
 
+from thop import profile
 from configs import config_factory
 
 cfg = config_factory['resnet_cityscapes']
@@ -49,25 +50,25 @@ class Trainer(object):
         # 使用”**”调用函数,这种方式我们需要一个字典.注意:在函数调用中使用”*”，我们需要元组;
 
         # Define network
-        # model = DeepLab(num_classes=self.nclass,  # num_classes=8
-        #                 backbone=args.backbone,   # backbone=resnet
-        #                 output_stride=args.out_stride,  # output_stride=16
-        #                 sync_bn=args.sync_bn,  # sync_bn= False
-        #                 freeze_bn=args.freeze_bn)  # freeze_bn=False
+        model = DeepLab(num_classes=self.nclass,  # num_classes=8
+                        backbone=args.backbone,   # backbone=resnet
+                        output_stride=args.out_stride,  # output_stride=16
+                        sync_bn=args.sync_bn,  # sync_bn= False
+                        freeze_bn=args.freeze_bn)  # freeze_bn=False
         # model = DeepLab_EaNet(backbone=args.backbone, output_stride=args.out_stride)
         # model = DeeplabUnet(backbone=args.backbone, output_stride=args.out_stride)
         # 获得图片的通道数
-        model = UNet(backbone=args.backbone, num_classes=self.nclass)
+        # model = UNet(backbone=args.backbone, num_classes=self.nclass)
 
         # 构建一个优化参数列表
-        # train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
-        #                 {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]  # train_params[0]:args.lr = 0.035
+        train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
+                        {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]  # train_params[0]:args.lr = 0.035
 
         # Define Optimizer  ******优化器***** 是算一个batch计算一次梯度，然后进行一次梯度更新
-        # optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
-        #                             weight_decay=args.weight_decay, nesterov=args.nesterov)
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=args.momentum,
+        optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
                                     weight_decay=args.weight_decay, nesterov=args.nesterov)
+        # optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=args.momentum,
+        #                             weight_decay=args.weight_decay, nesterov=args.nesterov)
 
         # 随机梯度下降SGD：nesterov具有预测能力，
         # momentum=0.9 综合考虑了梯度下降的方向和上次更新的方向  weight_decay=0.0005 nesterov=false
@@ -252,7 +253,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录2022.5.13.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -300,7 +301,7 @@ def main():
     parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")  # 创建解析器
     # ArgumentParser:对象包含将命令行解析成 Python 数据类型所需的全部信息。 description：在参数帮助文档之前显示的文本
     # 给一个 ArgumentParser 添加程序参数信息是通过调用 add_argument() 方法完成的
-    parser.add_argument('--backbone', type=str, default='unet',
+    parser.add_argument('--backbone', type=str, default='resnet',
                         choices=['resnet', 'xception', 'drn', 'mobilenet', 'ghostnet', 'unet'],
                         help='backbone name (default: resnet)')  # 主干网络，用来做特征提取的网络，代表网络的一部分，一般是用于前端提取图片信息，生成特征图feature map,供后面的网络使用。
     parser.add_argument('--out-stride', type=int, default=16,

@@ -245,7 +245,15 @@ class DeepLab(nn.Module):
 
         self.freeze_bn = freeze_bn
 
+    def forward(self, input):
+        x, low_level_feat = self.backbone(input)  # x=[2, 160, 7, 7]   low_level_feat=[2, 24, 56, 56]
+        x = self.aspp(x)  # [2,160,7,7]->[2,256,7,7]
+        x = self.decoder(x, low_level_feat)  # [2, 256, 7, 7]   [2, 24, 56, 56] -> [1, 8, 56, 56]
+        x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)  # 4倍上采样 ->[1,8,512,512]
 
+        return x
+
+    """MASPP+注意力模块
     def forward(self, input):  # aspp->maspp
         [x1, x2, x3, x4] = self.backbone(input)  # resnet:x4:[4,2048,32,32] x3:[4,1024,32,32] x2:[4,512,64,64] x1:[4,256,128,128]
         maspp = self.aspp(x4)  # [4,256,32,32]
@@ -255,6 +263,7 @@ class DeepLab(nn.Module):
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)  # 4倍上采样 ->[4,8,512,512]
 
         return x
+    """
 
     """
     原本：
