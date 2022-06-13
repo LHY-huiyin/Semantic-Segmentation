@@ -74,7 +74,7 @@ class InvertedResidual(nn.Module):  # 倒置的残差连接
             x = self.conv(x_pad)   # if决定的：是否残差，而它们都是要做expand_ratio = 6
         return x
 
-"""原本"""
+
 class MobileNetV2(nn.Module):
     def __init__(self, output_stride=8, BatchNorm=None, width_mult=1., pretrained=True):
         super(MobileNetV2, self).__init__()
@@ -129,7 +129,7 @@ class MobileNetV2(nn.Module):
         self.high_level_features = self.features[4:]  # 4,5,6,7,8,9,10,11,12,13,14,15,16,17
 
     def forward(self, x):
-        low_level_feat = self.low_level_features(x)   # torch.Size([1, 24, 56, 56])  获得特征图
+        low_level_feat = self.low_level_features(x)   # torch.Size([1, 24, 56, 56])
         x = self.high_level_features(low_level_feat)  # torch.Size([1, 320, 14, 14])
         return x, low_level_feat
 
@@ -157,99 +157,9 @@ class MobileNetV2(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-"""
-class MobileNetV2(nn.Module):
-    def __init__(self, output_stride=8, BatchNorm=None, width_mult=1., pretrained=True):
-        super(MobileNetV2, self).__init__()
-        block = InvertedResidual
-        input_channel = 32
-        current_stride = 1
-        rate = 1
-        interverted_residual_setting = [
-            # t:输入通道的倍增系数（即中间部分的通道数是输入通道数的多少倍）
-            # s:该模块第一次重复时的 stride（后面重复都是 stride 1）
-            # n:该模块重复次数  c:输出通道数
-            # t, c, n, s
-            [1, 16, 1, 1],
-            [6, 24, 2, 2],
-            [6, 32, 3, 2],
-            [6, 64, 4, 2],
-            [6, 96, 3, 1],
-            [6, 160, 3, 2],
-            [6, 320, 1, 1],
-        ]
-
-        # building first layer
-        input_channel = int(input_channel * width_mult)  # input_channel=32 width_mult=1
-        self.features = [conv_bn(3, input_channel, 2, BatchNorm)]  # [1,3,224,224] -> [1,32,112,112]
-
-        current_stride *= 2  # 2
-        # building inverted residual blocks
-        for t, c, n, s in interverted_residual_setting:
-            if current_stride == output_stride:  # @ 当current_stride=16后，stride固定为1，dilation会改变
-                # ￥ 若output_stride=8时，stride固定为1，dilation会改变
-                stride = 1  # ￥ s=2 1 2 1
-                dilation = rate  # @ 1 1 2    #￥ 1 2 2 4
-                rate *= s  # @ 1 2 2  #￥ 2 2 4 4
-            else:  # current_stride=2 output_stride=16
-                stride = s  # 1 2 2 2
-                dilation = 1
-                current_stride *= s  # 2 4 8 16
-            output_channel = int(c * width_mult)   # 16 24 32 64 & 96 160 320
-            for i in range(n):  # n为重复次数 1 2 3 4 3 3 1 1
-                if i == 0:  # 与ResNet类似，每层Bottleneck单独处理，指定stride。此层外的stride均为1
-                    self.features.append(block(input_channel, output_channel, stride, dilation, t, BatchNorm))
-                else:  # 这些叠加层stride均为1，in_channels = out_channels
-                    self.features.append(block(input_channel, output_channel, 1, dilation, t, BatchNorm))
-                input_channel = output_channel
-        self.features = nn.Sequential(*self.features)
-        self._initialize_weights()
-
-        if pretrained:
-            self._load_pretrained_model()
-
-        # self.low_level_features = self.features[0:4]  # 0,1,2,3
-        # self.high_level_features = self.features[4:]  # 4,5,6,7,8,9,10,11,12,13,14,15,16,17
-        self.layer1 = self.features[0:2]  # [B,16,256,256]
-        self.layer2 = self.features[2:4]  # [B,24,128,128]
-        self.layer3 = self.features[4:7]  # [B,32,64,64]
-        self.layer4 = self.features[7:18]  # [B,320,32,32]
-
-    def forward(self, x):
-        x1 = self.layer1(x)
-        x2 = self.layer2(x1)
-        x3 = self.layer3(x2)
-        x4 = self.layer4(x3)
-        return [x1, x2, x3, x4]
-
-    def _load_pretrained_model(self):
-        pretrain_dict = model_zoo.load_url('http://jeff95.me/models/mobilenet_v2-6a65762b.pth')
-        model_dict = {}
-        state_dict = self.state_dict()
-        for k, v in pretrain_dict.items():
-            if k in state_dict:
-                model_dict[k] = v
-        state_dict.update(model_dict)
-        self.load_state_dict(state_dict)
-
-    # 初始化权重操作
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                # n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                # m.weight.data.normal_(0, math.sqrt(2. / n))
-                torch.nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, SynchronizedBatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-"""
-
 if __name__ == "__main__":
-    input = torch.rand(1, 3, 512, 512)
-    model = MobileNetV2(output_stride=8, BatchNorm=nn.BatchNorm2d)  # out_stride 意味着输出的特征图是16倍降采样的结果
+    input = torch.rand(1, 3, 224, 224)
+    model = MobileNetV2(output_stride=16, BatchNorm=nn.BatchNorm2d)  # out_stride 意味着输出的特征图是16倍降采样的结果
     output, low_level_feat = model(input)  # low_level_feat : torch.Size([1, 24, 56, 56]) output : torch.Size([1, 320, 14, 14])
     print(output.size())  # torch.Size([1, 320, 14, 14])
     print(low_level_feat.size())  # torch.Size([1, 24, 56, 56])

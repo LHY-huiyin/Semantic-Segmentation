@@ -1,38 +1,25 @@
 import argparse
-import codecs
 import os
-from collections import OrderedDict
-
 import numpy as np
-from PIL.Image import Image
-from matplotlib import transforms
 from tqdm import tqdm
 
-from dataloaders.utils import decode_segmap
 from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.deeplab import *
-from modeling.EaNet import *
-from modeling.deeplab_unet.DeeplabUnet import *
-from modeling.unet.unet_d import UNet
-from utils.loss import SegmentationLosses, ECELoss
+from modeling.deeplab_origin import *
+from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 
-from apex import amp
 import matplotlib.pyplot as plt
 import cv2
 import time
 
-from thop import profile
-from configs import config_factory
-
-cfg = config_factory['resnet_cityscapes']
-
+import codecs
+from dataloaders.utils import decode_segmap
 
 class Trainer(object):
     def __init__(self, args):
@@ -244,7 +231,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")

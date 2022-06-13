@@ -112,12 +112,12 @@ class Decoder(nn.Module):
 
         # MASPP+位置注意力模块
         # if bilinear, use the normal convolutions to reduce the number of channels
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            self.conv = DoubleConv(in_channels, out_channels)
+        # if bilinear:
+        #     self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        #     self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
+        # else:
+        #     self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+        #     self.conv = DoubleConv(in_channels, out_channels)
 
         """
         # 1*1卷积
