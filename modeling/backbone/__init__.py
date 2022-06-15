@@ -1,4 +1,4 @@
-from modeling.backbone import resnet, xception, drn, mobilenet, ghostnet_rectify, resnetxt_cifar, resnetxt, mobilenet_origin
+from modeling.backbone import resnet, xception, drn, mobilenet, ghostnet_rectify, resnetxt_cifar, resnetxt, mobilenet_origin, ghostnet_origin
 
 def build_backbone(backbone, output_stride, BatchNorm):  # 'resnet' 16
     if backbone == 'resnet':  # 16
@@ -12,6 +12,6 @@ def build_backbone(backbone, output_stride, BatchNorm):  # 'resnet' 16
     elif backbone == 'mobilenet':
         return mobilenet_origin.MobileNetV2(output_stride, BatchNorm)
     elif backbone == 'ghostnet':
-        return ghostnet_rectify.GhostNet()
+        return ghostnet_origin.GhostNet()
     else:
         raise NotImplementedError

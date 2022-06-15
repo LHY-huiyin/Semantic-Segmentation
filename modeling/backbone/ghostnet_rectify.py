@@ -257,7 +257,8 @@ class GhostNet(nn.Module):
 
     def init_weights(self):
         # 先读取下载的预训练的键，读取模型的键
-        checkpoint = torch.load('F:\\Code\\Deeplabv3Plus\\pytorch-deeplab-dualattention\\test\\state_dict_73.98.pth')
+        checkpoint = torch.load('C:\\Remote sensing semantic segmentation\\Semantic Segmentation\\test\\state_dict_73.98.pth')
+        # https://github.com/huawei-noah/CV-Backbones/blob/master/ghostnet_pytorch/models/state_dict_73.98.pth
         state_dict = OrderedDict()  # 对字典对象中的元素排序
         # convert data_parallal to model 改变键的名字    更改名：将下载的预训练的键进行改名，if判断语句有很多个，因为结构有变化
         i = 0

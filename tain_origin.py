@@ -231,7 +231,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录xception.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -279,7 +279,7 @@ def main():
     parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")  # 创建解析器
     # ArgumentParser:对象包含将命令行解析成 Python 数据类型所需的全部信息。 description：在参数帮助文档之前显示的文本
     # 给一个 ArgumentParser 添加程序参数信息是通过调用 add_argument() 方法完成的
-    parser.add_argument('--backbone', type=str, default='mobilenet',
+    parser.add_argument('--backbone', type=str, default='ghostnet',
                         choices=['resnet', 'xception', 'drn', 'mobilenet', 'ghostnet', 'unet'],
                         help='backbone name (default: resnet)')  # 主干网络，用来做特征提取的网络，代表网络的一部分，一般是用于前端提取图片信息，生成特征图feature map,供后面的网络使用。
     parser.add_argument('--out-stride', type=int, default=16,
@@ -310,7 +310,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=12,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=8,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
