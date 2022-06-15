@@ -6,7 +6,7 @@ from tqdm import tqdm
 from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.deeplab_origin import *
+from modeling.deeplab_ghostnet import *
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
@@ -231,7 +231,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录xception.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录ghostnet.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
