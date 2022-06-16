@@ -231,8 +231,8 @@ class ResNet(nn.Module):
         # 先执行这一步 print("weight****")
 
     def _load_pretrained_model(self):  # 查看预训练模型的参数
-        pretrain_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet101-5d3b4d8f.pth')  # 下载预训练权重resnet101
-        # pretrain_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet50-19c8e357.pth')   # 下载预训练权重resnet50
+        # pretrain_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet101-5d3b4d8f.pth')  # 下载预训练权重resnet101
+        pretrain_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet50-19c8e357.pth')   # 下载预训练权重resnet50
         model_dict = {}
         state_dict = self.state_dict()
         for k, v in pretrain_dict.items():
