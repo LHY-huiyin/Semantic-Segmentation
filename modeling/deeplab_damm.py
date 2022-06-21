@@ -43,6 +43,7 @@ class DeepLab(nn.Module):
         x1 = self.aspp(x)  # x->[1,256,32,32]
         x2 = self.damm(x)
         "两个特征图进行融合，相加会保留更多信息"
+
         x = x1 + x2
         x = self.decoder(x, low_level_feat)  # x:[1,256,32,32] -> torch.Size([1, 8, 128, 128])
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)  # 4倍上采样 ->[1,8,512,512]
