@@ -31,9 +31,9 @@ class _ASPPModule(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-class ASPP(nn.Module):
+class MASPP(nn.Module):
     def __init__(self, backbone, output_stride, BatchNorm):
-        super(ASPP, self).__init__()
+        super(MASPP, self).__init__()
         if backbone == 'drn':
             inplanes = 512
         elif backbone == 'mobilenet':
@@ -48,11 +48,40 @@ class ASPP(nn.Module):
         else:
             raise NotImplementedError
 
-        self.aspp1 = _ASPPModule(inplanes, 256, 1, padding=0, dilation=dilations[0], BatchNorm=BatchNorm)  # padding=0 dilation=1   -> [batch, 256,  h, w]
-        self.aspp2 = _ASPPModule(inplanes, 256, 3, padding=dilations[1], dilation=dilations[1], BatchNorm=BatchNorm)  # padding=6 dilation=6  -> [batch, 256,  h, w]
-        self.aspp3 = _ASPPModule(inplanes, 256, 3, padding=dilations[2], dilation=dilations[2], BatchNorm=BatchNorm)  # padding=12 dilation=12 out=in -> [batch, 256,  h, w]
-        self.aspp4 = _ASPPModule(inplanes, 256, 3, padding=dilations[3], dilation=dilations[3], BatchNorm=BatchNorm)  # padding=18 dilation=18 out=in -> [batch, 256,  h, w]
-
+        # MSPP
+        # 膨胀后卷积核尺寸 = 膨胀系数 * (原始卷积核尺寸 - 1) + 1  = 2x(3-1)+1 =5
+        # k=2*5-3=7 out=[in-k+2*padding]/stride+1=[(in-7+6)/1]+1=in    out = in
+        self.maspp1 = nn.Sequential(
+            nn.Conv2d(inplanes, 256, 1, stride=1, padding=0, dilation=dilations[0], bias=False),  # conv1*1
+            BatchNorm(256),
+            nn.ReLU())  # con1*1   out=[in-1+2*0]/1+1=in  ->[b,256,h,w]
+        self.maspp2 = nn.Sequential(
+            nn.Conv2d(inplanes, 256, 3, stride=1, padding=dilations[0], dilation=dilations[0], bias=False),
+            # conv3*3 rate=1
+            BatchNorm(256),
+            nn.ReLU())  # con3*3 rate=1  k=3 out=[in-3+2]/1+1=in     ->[b,256,h,w]
+        self.maspp3 = nn.Sequential(
+            nn.Conv2d(inplanes, 256, 3, stride=1, padding=dilations[0], dilation=dilations[0], bias=False),
+            # conv3*3 rate=1
+            BatchNorm(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, stride=1, padding=dilations[1], dilation=dilations[1], bias=False),
+            # conv3*3 rate=3
+            BatchNorm(256),
+            nn.ReLU())  # con3*3 rate=1 -> conv3*3 rate=3    rate=3:k=3*(3-1)+1=5 out=[in-5+6]/1+1=in  ->[b,256,h,w]
+        self.maspp4 = nn.Sequential(
+            nn.Conv2d(inplanes, 256, 3, stride=1, padding=dilations[0], dilation=dilations[0], bias=False),
+            # conv3*3 rate=1
+            BatchNorm(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, stride=1, padding=dilations[1], dilation=dilations[1], bias=False),
+            # conv3*3 rate=3
+            BatchNorm(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, stride=1, padding=dilations[2], dilation=dilations[2], bias=False),
+            # conv3*3 rate=5
+            BatchNorm(256),
+            nn.ReLU(), )  # con3*3 rate=1 -> conv3*3 rate=3 -> conv3*3 rate=5     rate=5:k=5*(3-1)+1=11 out=[in-11+5*2]/1+1=in  ->[b,256,h,w]
         self.global_avg_pool = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)),  # 自适应平均池化：括号内是输出尺寸1*1：相当于全剧平均池化;对每个特征图，累加所有像素值并求平均;减少参数数量，减少计算量，减少过拟合
                                              nn.Conv2d(inplanes, 256, 1, stride=1, bias=False),  # -> [batch, 256, h, w]
                                              BatchNorm(256),
@@ -64,10 +93,10 @@ class ASPP(nn.Module):
         self._init_weight()
 
     def forward(self, x):  # x=[1, 2048, 32, 32]
-        x1 = self.aspp1(x)  # ->[1, 256, 32, 32]
-        x2 = self.aspp2(x)  # ->[1, 256, 32, 32]
-        x3 = self.aspp3(x)  # ->[1, 256, 32, 32]
-        x4 = self.aspp4(x)  # ->[1, 256, 32, 32]
+        x1 = self.maspp1(x)  # ->[1, 256, 32, 32]
+        x2 = self.maspp2(x)  # ->[1, 256, 32, 32]
+        x3 = self.maspp3(x)  # ->[1, 256, 32, 32]
+        x4 = self.maspp4(x)  # ->[1, 256, 32, 32]
         x5 = self.global_avg_pool(x)  # ->[1,256,1,1] 全局平均池化 256个1*1的矩阵
         x5 = F.interpolate(x5, size=x4.size()[2:], mode='bilinear', align_corners=True)  # ->[1,256,32,32]  把256个1*1矩阵数值copy成32*32
             # align_corners：设置为True，则输入和输出张量由其角像素的中心点对齐，从而保留角像素处的值。
@@ -94,5 +123,5 @@ class ASPP(nn.Module):
                 m.bias.data.zero_()
 
 
-def build_aspp(backbone, output_stride, BatchNorm):
-    return ASPP(backbone, output_stride, BatchNorm)
+def build_maspp(backbone, output_stride, BatchNorm):
+    return MASPP(backbone, output_stride, BatchNorm)
