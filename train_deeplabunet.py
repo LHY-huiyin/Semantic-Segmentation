@@ -1,37 +1,25 @@
 import argparse
-import codecs
 import os
-from collections import OrderedDict
-
 import numpy as np
-from PIL.Image import Image
-from matplotlib import transforms
 from tqdm import tqdm
 
-from dataloaders.utils import decode_segmap
 from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.deeplab import *
-from modeling.EaNet import *
 from modeling.deeplab_unet.deeplabunet_DeeplabUnet import *
-from modeling.unet.unet_d import UNet
-from utils.loss import SegmentationLosses, ECELoss
+from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 
-from apex import amp
 import matplotlib.pyplot as plt
 import cv2
 import time
 
-from thop import profile
-from configs import config_factory
-
-cfg = config_factory['resnet_cityscapes']
+import codecs
+from dataloaders.utils import decode_segmap
 
 class Trainer(object):
     def __init__(self, args):
@@ -43,22 +31,14 @@ class Trainer(object):
         # Define Tensorboard Summary
         self.summary = TensorboardSummary(self.saver.experiment_dir)  # 'run\\pascal\\deeplab-resnet\\experiment_10'
         self.writer = self.summary.create_summary()  # 'run\\pascal\\deeplab-resnet\\experiment_10'
-        
+
         # Define Dataloader
         kwargs = {'num_workers': args.workers, 'pin_memory': True}  # {'num_workers': 4, 'pin_memory': True}
         self.train_loader, self.val_loader, self.test_loader, self.nclass = make_data_loader(args, **kwargs)
         # 使用”**”调用函数,这种方式我们需要一个字典.注意:在函数调用中使用”*”，我们需要元组;
 
         # Define network
-        model = DeepLab(num_classes=self.nclass,  # num_classes=8
-                        backbone=args.backbone,   # backbone=resnet
-                        output_stride=args.out_stride,  # output_stride=16
-                        sync_bn=args.sync_bn,  # sync_bn= False
-                        freeze_bn=args.freeze_bn)  # freeze_bn=False
-        # model = DeepLab_EaNet(backbone=args.backbone, output_stride=args.out_stride)
-        # model = DeeplabUnet(backbone=args.backbone, output_stride=args.out_stride)
-        # 获得图片的通道数
-        # model = UNet(backbone=args.backbone, num_classes=self.nclass)
+        model = DeeplabUnet(backbone=args.backbone, output_stride=args.out_stride)
 
         # 构建一个优化参数列表
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
@@ -67,8 +47,6 @@ class Trainer(object):
         # Define Optimizer  ******优化器***** 是算一个batch计算一次梯度，然后进行一次梯度更新
         optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
                                     weight_decay=args.weight_decay, nesterov=args.nesterov)
-        # optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=args.momentum,
-        #                             weight_decay=args.weight_decay, nesterov=args.nesterov)
 
         # 随机梯度下降SGD：nesterov具有预测能力，
         # momentum=0.9 综合考虑了梯度下降的方向和上次更新的方向  weight_decay=0.0005 nesterov=false
@@ -78,7 +56,8 @@ class Trainer(object):
         # Define Criterion 损失函数
         # whether to use class balanced weights 类平衡权重
         if args.use_balanced_weights:  # false
-            classes_weights_path = os.path.join(Path.db_root_dir(args.dataset), args.dataset+'_classes_weights.npy')  # 'G:\\LoveDA\\pascal_classes_weights.npy'
+            classes_weights_path = os.path.join(Path.db_root_dir(args.dataset),
+                                                args.dataset + '_classes_weights.npy')  # 'G:\\LoveDA\\pascal_classes_weights.npy'
             if os.path.isfile(classes_weights_path):
                 weight = np.load(classes_weights_path)
             else:
@@ -86,23 +65,16 @@ class Trainer(object):
             weight = torch.from_numpy(weight.astype(np.float32))
         else:
             weight = None  # None
-        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(mode=args.loss_type)   # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
-        # self.criterion = ECELoss(n_classes=cfg.n_classes, alpha=cfg.alpha, radius=cfg.radius,
-        #         beta=cfg.beta, ignore_lb=cfg.ignore_label, mode=cfg.mode).cuda()
+        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
+            mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
         self.model, self.optimizer = model, optimizer
-        # model, optimizer = amp.initialize(self.model.cuda(), self.optimizer, opt_level="O1")  # 这里是“欧一”，不是“零一”
-        if torch.cuda.device_count() > 1:  # 使用多GPU
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
-            # model = nn.DataParallel(model_quest_bert_LSTM)
-
-            # model_quest_bert_LSTM = model_quest_bert_LSTM.cuda(device)  # cuda(device)
-            model = nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)  # 分布式训练.
 
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)  # 指标miou
         # Define lr scheduler
         self.scheduler = LR_Scheduler(args.lr_scheduler, args.lr,  # 学习率策略lr_scheduler:'poly' lr=0.0035
-                                            args.epochs, len(self.train_loader))   # epochs:50  train_loader:578(训练集有1156张图片，由于batch_size=2，所以目前一个batch)
+                                      args.epochs, len(
+                self.train_loader))  # epochs:50  train_loader:578(训练集有1156张图片，由于batch_size=2，所以目前一个batch)
         # 一个epoch意味着训练集中每一个样本都参与训练了一次。epoch：整个数据集训练了多少次.epoch由一个或多个Ｂａｔｃｈ组成
         # 有1156长图片，batch为2，意味着每两个样本才更新一次参数，也就意味着一个epoch里会提取1156/2=578次bach，这样才会把每个样本都提取一边，更新了578次此参数。这是一个epoch做的
         # 每个epoch要训练的图片数量：1156
@@ -111,7 +83,8 @@ class Trainer(object):
 
         # Using cuda
         if args.cuda:
-            self.model = torch.nn.DataParallel(self.model, device_ids=self.args.gpu_ids)  # gpu_ids=0 第0块gpu训练  torch.nn.DataParallel 进行多GPU训练
+            self.model = torch.nn.DataParallel(self.model,
+                                               device_ids=self.args.gpu_ids)  # gpu_ids=0 第0块gpu训练  torch.nn.DataParallel 进行多GPU训练
             # module即表示你定义的模型；device_ids表示你训练的device；
             # output_device这个参数表示输出结果的device；而这最后一个参数output_device一般情况下是省略不写的，那么默认就是在device_ids[0]，也就是第一块卡上，也就解释了为什么第一块卡的显存会占用的比其他卡要更多一些。
             patch_replication_callback(self.model)
@@ -121,7 +94,7 @@ class Trainer(object):
         self.best_pred = 0.0
         if args.resume is not None:
             if not os.path.isfile(args.resume):
-                raise RuntimeError("=> no checkpoint found at '{}'" .format(args.resume))
+                raise RuntimeError("=> no checkpoint found at '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)  # 读取预训练模型
             args.start_epoch = checkpoint['epoch']
             if args.cuda:
@@ -162,9 +135,10 @@ class Trainer(object):
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
             self.optimizer.step()  # 根据梯度更新网络参数
-            train_loss += loss.item()   # 4.322970390319824递增
+            train_loss += loss.item()  # 4.322970390319824递增
             # item()返回loss的值，叠加之后算出总loss，最后再除以mini-batches的数量，取loss平均值。
-            tbar.set_description('Train loss: %.3f' % (train_loss / (i + 1)))   # 显示，前面时损失值：train_loss,后面是进度条：Train loss: 0.682:  31%|███       |
+            tbar.set_description('Train loss: %.3f' % (
+                        train_loss / (i + 1)))  # 显示，前面时损失值：train_loss,后面是进度条：Train loss: 0.682:  31%|███       |
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
             # 数据保存在文件里面供可视化使用，代码运行结束后，会在当前的工作目录下自动生一个 runs 目录
 
@@ -174,19 +148,19 @@ class Trainer(object):
                 self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
-        print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))  # [Epoch: 0, numImages:  1156]
+        print('[Epoch: %d, numImages: %5d]' % (
+        epoch, i * self.args.batch_size + image.data.shape[0]))  # [Epoch: 0, numImages:  1156]
         print('Loss: %.3f' % train_loss)  # Loss: 340.250
 
         if self.args.no_val:
             # save checkpoint every epoch
             is_best = False
-            self.saver.save_checkpoint({   # 预训练模型参数
+            self.saver.save_checkpoint({  # 预训练模型参数
                 'epoch': epoch + 1,
                 'state_dict': self.model.module.state_dict(),  # 返回一个包含模型状态信息的字典 将每层与层的参数张量之间一一映射
                 'optimizer': self.optimizer.state_dict(),  # 包含的是关于优化器状态的信息和使用到的超参数
                 'best_pred': self.best_pred,
             }, is_best)
-
 
     def validation(self, epoch):
         self.model.eval()  # 测试状态
@@ -221,7 +195,7 @@ class Trainer(object):
             tbar.set_description('Test loss: %.3f' % (test_loss / (i + 1)))
             # 因为是tensor，需要将它从GPU拿出来
             pred = output.data.cpu().numpy()  # (5, 8, 512, 512)
-            target = target.cpu().numpy()   # (5, 512, 512)
+            target = target.cpu().numpy()  # (5, 512, 512)
             pred = np.argmax(pred, axis=1)  # (5, 512, 512)
             # Add batch sample into evaluator
             self.evaluator.add_batch(target, pred)
@@ -253,7 +227,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录mobilenet.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet50_deeplabunet.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -272,7 +246,7 @@ class Trainer(object):
         # 数据加载器中数据的维度是[B, C, H, W]，我们每次只拿一个数据出来就是[C, H, W]，而matplotlib.pyplot.imshow要求的输入维度是[H, W, C]，
         # 所以我们需要交换一下数据维度，把通道数放到最后面，这里用到pytorch里面的permute方法（transpose方法也行，不过要交换两次，没这个方便，numpy中的transpose方法倒是可以一次交换完成）
         # 将tensor的维度换位。RGB->BGR  permute(1, 2, 0)
-        if new_pred >= 0.54:  # MIOU
+        if new_pred >= 0.59:  # MIOU
             for i, sample in enumerate(tbar):
                 image, target = sample['image'], sample['label']
                 if self.args.cuda:
@@ -291,7 +265,7 @@ class Trainer(object):
                     # print(pred[i].shape)     #(512, 512)
                     plt.subplot(2, 2, j + 1)  # 需要注意的是所有的数字不能超过10
                     tmp = np.array(pred[j]).astype(np.uint8)  # (512,512)
-                    segmap = decode_segmap(tmp, dataset='pascal')   # (3, 512, 512)
+                    segmap = decode_segmap(tmp, dataset='pascal')  # (3, 512, 512)
                     plt.imshow(segmap)  # ([256, 256, 1])
                     plt.axis('off')
                 plt.show()
@@ -301,7 +275,7 @@ def main():
     parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")  # 创建解析器
     # ArgumentParser:对象包含将命令行解析成 Python 数据类型所需的全部信息。 description：在参数帮助文档之前显示的文本
     # 给一个 ArgumentParser 添加程序参数信息是通过调用 add_argument() 方法完成的
-    parser.add_argument('--backbone', type=str, default='mobilenet',
+    parser.add_argument('--backbone', type=str, default='resnet',
                         choices=['resnet', 'xception', 'drn', 'mobilenet', 'ghostnet', 'unet'],
                         help='backbone name (default: resnet)')  # 主干网络，用来做特征提取的网络，代表网络的一部分，一般是用于前端提取图片信息，生成特征图feature map,供后面的网络使用。
     parser.add_argument('--out-stride', type=int, default=16,
@@ -332,7 +306,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=12,   # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=4,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
@@ -356,7 +330,7 @@ def main():
 
     # cuda, seed and logging
     parser.add_argument('--no-cuda', action='store_true', default=
-                        False, help='disables CUDA training')  # 使用gpu
+    False, help='disables CUDA training')  # 使用gpu
     parser.add_argument('--gpu-ids', type=str, default='0',
                         help='use which gpu to train, must be a \
                         comma-separated list of integers only (default=0)')
@@ -416,9 +390,8 @@ def main():
         }
         args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size  # lr=0.0035  【0.007/4】*2
 
-
     if args.checkname is None:  # None
-        args.checkname = 'deeplab-'+str(args.backbone)  # 'deeplab-resnet'
+        args.checkname = 'deeplab-' + str(args.backbone)  # 'deeplab-resnet'
     print(args)
     torch.manual_seed(args.seed)  # 为特定GPU设置种子，生成随机数  为了确保每次生成固定的随机数
     trainer = Trainer(args)  # 初始化参数
@@ -431,5 +404,6 @@ def main():
 
     trainer.writer.close()
 
+
 if __name__ == "__main__":
-   main()
+    main()

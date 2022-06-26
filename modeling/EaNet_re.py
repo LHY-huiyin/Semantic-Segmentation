@@ -9,7 +9,7 @@ from modeling.aspp import build_aspp, PSPModule
 from modeling.decoder import build_decoder
 from modeling.backbone import build_backbone
 from configs import config_factory
-from modeling.deeplab_unet.deeplabunet_model import Decoder_deeplabunet
+from modeling.deeplab_unet.decoder_deeplabunet import Decoder_deeplabunet
 
 cfg = config_factory['resnet_cityscapes']
 

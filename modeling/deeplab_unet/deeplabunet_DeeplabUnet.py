@@ -1,15 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from modeling.damm import build_damm
-from modeling.point_flow import PointFlowModuleWithMaxAvgpool
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.aspp import build_aspp, PSPModule
-from modeling.decoder import build_decoder
+from modeling.deeplab_unet.decoder_deeplabunet import build_decoder
 from modeling.backbone import build_backbone
 from configs import config_factory
-from modeling.deeplab_unet.deeplabunet_parts import create_decoder
+from modeling.deeplab_unet.decoder_deeplabunet import Decoder_deeplabunet
 
 cfg = config_factory['resnet_cityscapes']
 
@@ -167,72 +163,12 @@ class LKPP(nn.Module):
         return wd_params, non_wd_params
 
 
-class Decoder_deeplabunet(nn.Module):
-    def __init__(self, n_classes, low_chan=[1024, 512, 256],  dec_type='unet_scse', num_filters=16, *args, **kwargs):
-        super(Decoder_deeplabunet, self).__init__()
-        self.dec_type = dec_type
-        Decoder = create_decoder(dec_type)
-
-        self.conv_16 = ConvBNReLU(low_chan[0], 256, ks=3, padding=1)  # 此处只是调整通道数，进行3*3卷积，我的想法：调整为注意力机制，边界模块
-        self.conv_8 = ConvBNReLU(low_chan[1], 128, ks=3, padding=1)
-        self.conv_4 = ConvBNReLU(low_chan[2], 64, ks=3, padding=1)
-
-        # num_filters*2 =32    num_filters * 4 =64      num_filters * 8 =128     num_filters * 16=256      num_filters * 32 = 512      num_filters * 32 * 2 =1024
-        self.decoder16 = Decoder(low_chan[0] + num_filters*16, num_filters*32, num_filters*16)  # 1024+256-512-256
-        self.decoder8 = Decoder(low_chan[1] + num_filters*16, num_filters*16, num_filters*8)  # 512+256-256-128
-        self.decoder4 = Decoder(low_chan[2] + num_filters*8, num_filters*8, num_filters*4)  # 256+128-128-64
-        self.decoder2 = Decoder(num_filters*4*2, num_filters*4, num_filters*2)  # 256+64-64-32
-
-        self.fuse = ConvBNReLU(num_filters * (2 + 4 + 8 + 16), 64, ks=3, padding=1)  # 32+64+128+256
-
-        self.conv_out = nn.Conv2d(64, n_classes, kernel_size=1, bias=False)
-
-        self.init_weight()
-
-    def forward(self, x, feat2, feat4, feat8, feat16, feat_lkpp):  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4, 512, 48, 48] feat4:[4, 256, 96, 96]  feat2:[4, 64, 96, 96]
-        H, W = feat16.size()[2:]
-        img_size = x.shape[2:]
-
-        feat2_up = F.interpolate(feat2, scale_factor=2, mode='bilinear', align_corners=False)  # [4, 64, 192, 192]
-        feat_lkpp_up = F.interpolate(feat_lkpp, (H, W), mode='bilinear',
-                                     align_corners=True)  # [4, 256, 26, 26] -> [4, 256, 24, 24]
-
-        feat16_out = self.decoder16(feat16, feat_lkpp_up)  # torch.Size([4, 256, 48, 48])  先concat再进行卷积，与注意力机制
-        feat8_out = self.decoder8(feat8, feat16_out)  # torch.Size([4, 128, 96, 96])
-        feat4_out = self.decoder4(feat4, feat8_out)  # torch.Size([4, 64, 192, 192])
-        feat2_out = self.decoder2(feat2_up, feat4_out)  # torch.Size([4, 32, 384, 384])
-
-        u16 = F.interpolate(feat16_out, img_size, mode='bilinear', align_corners=False)  # 上采样 [4, 256, 384, 384]
-        u8 = F.interpolate(feat8_out, img_size, mode='bilinear', align_corners=False)  # [4, 128, 384, 384]
-        u4 = F.interpolate(feat4_out, img_size, mode='bilinear', align_corners=False)  # [4, 64, 384, 384]
-
-        d = torch.cat((feat2_out, u4, u8, u16), 1)  # torch.cat(feat2_out, u4, u8, u16)超出显存  32+64+128+256
-        logits = self.conv_out(self.fuse(d))
-
-        return logits
-
-    def init_weight(self):
-        for ly in self.children():
-            if isinstance(ly, nn.Conv2d):
-                nn.init.kaiming_normal_(ly.weight, a=1)
-                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
-
-    def get_params(self):
-        wd_params = []
-        non_wd_params = []
-        for name, param in self.named_parameters():
-            if 'bn' in name or 'bias' in name:
-                non_wd_params.append(param)
-            else:
-                wd_params.append(param)
-        return wd_params, non_wd_params
-
-class DeepLab_EaNet(nn.Module):
+class DeeplabUnet(nn.Module):
     # def __init__(self, backbone='resnet', output_stride=16, num_classes=21,
     #              sync_bn=True, freeze_bn=False):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
                  sync_bn=True, freeze_bn=False):
-        super(DeepLab_EaNet, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
+        super(DeeplabUnet, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
         if backbone == 'drn':  # 深度残差网络
             output_stride = 8  # 卷积输出时缩小的倍数  224/7=32
 
@@ -268,6 +204,7 @@ class DeepLab_EaNet(nn.Module):
 
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)  # 'resnet' 16 BatchNorm2d
         self.lkpp = LKPP(in_chan=2048, out_chan=256, mode='parallel', with_gp=cfg.aspp_global_feature)
+        self.decoder = Decoder_deeplabunet(cfg.n_classes, low_chan=[1024, 512, 256])
 
         # out = (in-kernel_size+2*padding)/stride + 1   k =1+(k-1)*dilation  k = 1+2*2=5
         self.conv1 = nn.Sequential(nn.Conv2d(inplanes, inplanes, kernel_size=3,  # out = in-1+4 = in
@@ -287,58 +224,12 @@ class DeepLab_EaNet(nn.Module):
 
     def forward(self, x):  #
         H, W = x.size()[2:]  # 256 256
-        feat2, feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
+        feat2, feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4, 512, 48, 48] feat4:[4, 256, 96, 96]  feat2:[4, 64, 96, 96]
         feat_lkpp = self.lkpp(feat32)  # [4, 256, 26, 26]
-        logits = self.decoder(feat2, feat4, feat8, feat16, feat_lkpp)  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
+        logits = self.decoder(x, feat2, feat4, feat8, feat16, feat_lkpp)  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
         logits = F.interpolate(logits, (H, W), mode='bilinear', align_corners=True)  # [4, 8, 96, 96]-># [4, 8, 384, 384]
 
         return logits
-
-    """
-    原本：
-    def forward(self, input): 
-        x, low_level_feat = self.backbone(input)  # x=[2, 160, 7, 7]   low_level_feat=[2, 24, 56, 56]
-        x = self.aspp(x)  # [2,160,7,7]->[2,256,7,7]
-        x = self.decoder(x, low_level_feat)  # [2, 256, 7, 7]   [2, 24, 56, 56] -> [1, 8, 56, 56]
-        x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)  # 4倍上采样 ->[1,8,512,512]
-
-        return x
-    """
-    """
-    双注意力机制：
-    def forward(self, input):
-        x, low_level_feat = self.backbone(input)
-        x = self.conv1(x)  # torch.Size([4, 320, 64, 64])
-        x1 = self.aspp(x)  # ->[2,256,62,62]
-        x2 = self.damm(x)  # ->[1,256,62,62]
-        # x = torch.cat((x1, x2), dim=1)  # x->[1,512,7,7]
-        # x = self.conv2(x)               # x->[1,256,7,7]  期望的输入通道要修改
-        x = x1 + x2  # 融合也可能是两个特征图相加 (4, 256, 62, 62)  torch.Size([4, 256, 62, 62])
-        x = self.decoder(x, low_level_feat)  # [4, 256, 62, 62]   [4, 24, 128, 128] -> [1, 8, 56, 56]
-        x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)  # 4倍上采样 ->[4,8,512,512]
-
-        return x
-    """
-    """点流模块：
-    def forward(self, input):  # input:torch.Size([2, 3, w, h])
-        # 点流模块的引入
-        [x1, x2, x3, x4] = self.backbone(input)  # 32 <- 64 <- 128 <- 256 <-512
-        x = self.head([x1, x2, x3, x4])  # res:[4,8,128,128]  [b,8,最后一张特征图的大小]
-        # x = self.decoder(x)  # [2, 256, 7, 7]   [2, 24, 56, 56] -> [1, 8, 56, 56]
-        x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)  # 4倍上采样 ->[1,8,512,512]
-
-        return x
-    """
-    """EaNet
-    def forward(self, x):  # aspp->maspp
-        H, W = x.size()[2:]  # 256 256
-        feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
-        feat_lkpp = self.lkpp(feat32)  # [4, 256, 26, 26]
-        logits = self.decoder(feat4, feat8, feat16, feat_lkpp)  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
-        logits = F.interpolate(logits, (H, W), mode='bilinear', align_corners=True)  # [4, 8, 96, 96]-># [4, 8, 384, 384]
-
-        return logits
-    """
 
     # Given groups=1, weight of size [256, 2048, 3, 3],
     # 代表卷积核的channel 大小为 2048->256 ，大小为3*3
@@ -371,7 +262,7 @@ class DeepLab_EaNet(nn.Module):
                                 yield p
 
     def get_10x_lr_params(self):
-        modules = [self.aspp, self.decoder]
+        modules = [self.lkpp, self.decoder]
         for i in range(len(modules)):
             for m in modules[i].named_modules():
                 if self.freeze_bn:
@@ -389,10 +280,8 @@ class DeepLab_EaNet(nn.Module):
 
 if __name__ == "__main__":
     # model = DeepLab(backbone='mobilenet', output_stride=16)
-    model = DeepLab_EaNet(backbone='ghostnet', output_stride=16)
+    model = DeeplabUnet(backbone='ghostnet', output_stride=16)
     model.eval()  # 不启用 BatchNormalization 和 Dropout，保证BN和dropout不发生变化
     input = torch.rand(2, 3, 224, 224)  # RGB是三通道
     output = model(input)
     print(output.size())
-
-
