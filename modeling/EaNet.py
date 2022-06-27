@@ -161,7 +161,7 @@ class LKPP(nn.Module):
                 wd_params.append(param)
         return wd_params, non_wd_params
 
-
+"解码器结构"
 class Decoder_EaNet(nn.Module):
     def __init__(self, n_classes, low_chan=[1024, 512, 256], *args, **kwargs):
         super(Decoder_EaNet, self).__init__()
@@ -180,12 +180,14 @@ class Decoder_EaNet(nn.Module):
 
     def forward(self, feat4, feat8, feat16, feat_lkpp):  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
         H, W = feat16.size()[2:]
+        "对每一个编码器输出的特征图进行3*3卷积（Transfer）"
         feat16_low = self.conv_16(feat16)  # [4,1024,24,24] -> [4, 256, 24, 24]  3*3卷积
         feat8_low = self.conv_8(feat8)  # [4,512,48,48] -> [4, 128, 48, 48]
         feat4_low = self.conv_4(feat4)  # [4,256,96,96] -> [4, 64, 96, 96]
+        "对低层特征图进行2倍上采样"
         feat_lkpp_up = F.interpolate(feat_lkpp, (H, W), mode='bilinear',
                                      align_corners=True)  # [4, 256, 26, 26] -> [4, 256, 24, 24]
-
+        "将两个特征图进行融合-相加，获得新的低层特征图"
         feat_out = self.conv_fuse1(feat16_low + feat_lkpp_up)  # [4, 128, 24, 24]  直接相加
         H, W = feat8_low.size()[2:]  # 48 48
         feat_out = F.interpolate(feat_out, (H, W), mode='bilinear',
@@ -215,6 +217,7 @@ class Decoder_EaNet(nn.Module):
                 wd_params.append(param)
         return wd_params, non_wd_params
 
+"总体架构"
 class DeepLab_EaNet(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
                  sync_bn=True, freeze_bn=False):
@@ -263,6 +266,7 @@ class DeepLab_EaNet(nn.Module):
         feat2, feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
         feat_lkpp = self.lkpp(feat32)  # [4, 256, 26, 26]
         logits = self.decoder(feat4, feat8, feat16, feat_lkpp)  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
+        "进行4倍上采样"
         logits = F.interpolate(logits, (H, W), mode='bilinear', align_corners=True)  # [4, 8, 96, 96]-># [4, 8, 384, 384]
 
         return logits
