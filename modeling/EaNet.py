@@ -180,7 +180,7 @@ class Decoder_EaNet(nn.Module):
 
     def forward(self, feat4, feat8, feat16, feat_lkpp):  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
         H, W = feat16.size()[2:]
-        feat16_low = self.conv_16(feat16)  # [4,1024,24,24] -> [4, 256, 24, 24]
+        feat16_low = self.conv_16(feat16)  # [4,1024,24,24] -> [4, 256, 24, 24]  3*3卷积
         feat8_low = self.conv_8(feat8)  # [4,512,48,48] -> [4, 128, 48, 48]
         feat4_low = self.conv_4(feat4)  # [4,256,96,96] -> [4, 64, 96, 96]
         feat_lkpp_up = F.interpolate(feat_lkpp, (H, W), mode='bilinear',
