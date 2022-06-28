@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from modeling.damm import build_damm
+from modeling.damm_cam_pam import build_damm
 from modeling.point_flow import PointFlowModuleWithMaxAvgpool
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from modeling.unet.unet_parts import *

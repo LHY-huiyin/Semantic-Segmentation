@@ -5,7 +5,7 @@ from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from modeling.aspp_origin import build_aspp
 from modeling.decoder_origin import build_decoder
 from modeling.backbone import build_backbone
-from modeling.damm import build_damm
+from modeling.damm_cam_pam import build_damm
 
 class DeepLab(nn.Module):
     # def __init__(self, backbone='resnet', output_stride=16, num_classes=21,
