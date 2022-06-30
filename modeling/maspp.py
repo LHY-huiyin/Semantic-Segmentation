@@ -4,33 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
-class _ASPPModule(nn.Module):
-    def __init__(self, inplanes, planes, kernel_size, padding, dilation, BatchNorm):
-        super(_ASPPModule, self).__init__()
-        self.atrous_conv = nn.Conv2d(inplanes, planes, kernel_size=kernel_size,  # k=2*5-3=7 out=[in-7(k)+6(padding))/1(stride)]+1=in    out = in
-                                            stride=1, padding=padding, dilation=dilation, bias=False)  # 空洞卷积  -> [batch, 256,  h, w]
-        self.bn = BatchNorm(planes)
-        self.relu = nn.ReLU()
-
-        self._init_weight()
-
-    def forward(self, x):
-        x = self.atrous_conv(x)  # -> [batch, 256,  h, w]
-        x = self.bn(x)
-
-        return self.relu(x)
-
-    def _init_weight(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                torch.nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, SynchronizedBatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
 class MASPP(nn.Module):
     def __init__(self, backbone, output_stride, BatchNorm):
         super(MASPP, self).__init__()
