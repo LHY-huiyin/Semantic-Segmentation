@@ -106,7 +106,7 @@ class Decoder_MANet(nn.Module):
         self.cbam_conv = nn.Sequential(
             nn.Conv2d(2048, 1024, kernel_size=1, bias=False),
             nn.BatchNorm2d(1024),
-            # nn.ReLU()
+            nn.ReLU()
         )
         self.init_weight()
 
