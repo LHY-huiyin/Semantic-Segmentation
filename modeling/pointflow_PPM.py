@@ -55,6 +55,5 @@ class PSPModule(nn.Module):  # PPM模块：四个空洞卷积，再上采样并�
         return bottle
 
 
-
 def PPM(backbone, output_stride, BatchNorm):
     return PSPModule(backbone, output_stride, BatchNorm)
