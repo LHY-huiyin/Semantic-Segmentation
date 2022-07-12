@@ -61,7 +61,7 @@ class DeepLab_EaNet_BIFPN(nn.Module):
         H, W = x.size()[2:]  # 256 256
         feat2, feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
         feat_lkpp = self.lkpp(feat32)  # [4, 256, 26, 26]
-        p2_out, p2_in = self.decoder(feat2, feat4, feat8, feat16, feat_lkpp)  # p2_in p2_out:[4,256,96,96]
+        p2_out, p2_in, supervisor = self.decoder(feat2, feat4, feat8, feat16, feat_lkpp)  # p2_in p2_out:[4,256,96,96]
 
         "进行边界上采样"
         p2_out_1 = self.conv_out(p2_out)  # [4, 8, 96,96]
@@ -75,7 +75,7 @@ class DeepLab_EaNet_BIFPN(nn.Module):
         logits = F.interpolate(logits, (H, W), mode='bilinear', align_corners=True)
         # logits = F.interpolate(logits, (H, W), mode='bilinear', align_corners=True)  # [4, 8, 96, 96]-># [4, 8, 384, 384]
         # logits = 1
-        return logits
+        return logits, supervisor
 
     # Given groups=1, weight of size [256, 2048, 3, 3],
     # 代表卷积核的channel 大小为 2048->256 ，大小为3*3

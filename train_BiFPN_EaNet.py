@@ -7,7 +7,7 @@ from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from modeling.deeplab_BIFPN_EaNet import *
-from utils.loss import SegmentationLosses
+from utils.loss_bifpn_Eanet import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
@@ -130,11 +130,11 @@ class Trainer(object):
             # SGD随机梯度下降法：是算一个batch计算一次梯度，然后进行一次梯度更新
             # 这里梯度值就是对应偏导数的计算结果。显然，我们进行下一次batch梯度计算的时候，前一个batch的梯度计算结果，没有保留的必要了。
             # 所以在下一次梯度更新的时候，先使用optimizer.zero_grad把梯度信息设置为0。
-            output = self.model(image)
+            output, supervisor = self.model(image)
             # Target 7 is out of bounds. softmax输出的节点数与标签数不一致  已经经过模型 解决：类别数设置为8
             # print(output.shape)  # torch.Size([4, 8, 513, 513])
             # print(target.shape)  # torch.Size([4, 513, 513])
-            loss = self.criterion(output, target)  # 交叉熵损失函数 一个epoch之后：0.6823
+            loss = self.criterion(output, target, supervisor)  # 交叉熵损失函数 一个epoch之后：0.6823
             loss.backward()  # 反向传播，计算当前梯度；
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
@@ -188,13 +188,13 @@ class Trainer(object):
             with torch.no_grad():
                 # 计算FPS
                 time_start = time.time()
-                output = self.model(image)
+                output, supervisor = self.model(image)
                 time_end = time.time()
                 time_sum = time_end - time_start
                 if min_time_sum > time_sum:
                     min_time_sum = time_sum
                 # print(time_sum)
-            loss = self.criterion(output, target)
+            loss = self.criterion(output, target, supervisor)
             test_loss += loss.item()
             tbar.set_description('Test loss: %.3f' % (test_loss / (i + 1)))
             # 因为是tensor，需要将它从GPU拿出来
@@ -231,7 +231,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet50_BiFPN_EaNET.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet50_BiFPN_EaNET_loss.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -302,7 +302,7 @@ def main():
                         help='whether to use sync bn (default: auto)')
     parser.add_argument('--freeze-bn', type=bool, default=False,
                         help='whether to freeze bn parameters (default: False)')
-    parser.add_argument('--loss-type', type=str, default='ce',
+    parser.add_argument('--loss-type', type=str, default='focal',
                         choices=['ce', 'focal'],
                         help='loss func type (default: ce)')  # 损失函数类型：交叉熵损失函数
     # training hyper params
@@ -310,7 +310,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=12,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=4,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。

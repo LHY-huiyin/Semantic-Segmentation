@@ -6,8 +6,8 @@ class Path(object):
         if dataset == 'pascal':
             # return '/root/autodl-tmp/loveda_a/'  # AutoDL云服务器跑
             # return 'G:\\loveda_aft\\'
-            # return 'C:\\Remote sensing semantic segmentation\\loveda_a\\'  #'G:\\Loveda_a\\'
-            return 'C:\\Remote sensing semantic segmentation\\loveda_last\\'
+            return 'C:\\Remote sensing semantic segmentation\\loveda_a\\'  #'G:\\Loveda_a\\'  数据集大小为512*512
+            # return 'C:\\Remote sensing semantic segmentation\\loveda_last\\'  # 错误的设置：训练集348 验证集512
             # return 'X:\\luo\\loveda_a\\'
         # elif dataset == 'sbd':
         #     return '/path/to/datasets/benchmark_RELEASE/'  # folder that contains dataset/.

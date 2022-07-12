@@ -163,6 +163,38 @@ class LKPP(nn.Module):
                 wd_params.append(param)
         return wd_params, non_wd_params
 
+class BifpnConvs(nn.Module):
+    def __init__(self, in_chan, out_chan, ks=1, stride=1, padding=1, dilation=1, *args, **kwargs):
+        super(BifpnConvs, self).__init__()
+        self.conv = nn.Conv2d(in_chan,
+                              out_chan,
+                              kernel_size=ks,
+                              stride=stride,
+                              padding=padding,
+                              dilation=dilation,
+                              bias=True)
+        self.bn = nn.BatchNorm2d(out_chan)
+        self.relu = nn.ReLU(inplace=False)
+        self.ppm = PSPModule(in_chan, norm_layer=nn.BatchNorm2d, out_features=256)
+        self.init_weight()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.relu(x)
+
+        x = self.ppm(x)
+
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        return x
+
+    def init_weight(self):
+        for ly in self.children():
+            if isinstance(ly, nn.Conv2d):
+                nn.init.kaiming_normal_(ly.weight, a=1)
+                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
 
 "解码器结构"
 class Decoder_BiFPN_EaNet(nn.Module):
@@ -175,15 +207,16 @@ class Decoder_BiFPN_EaNet(nn.Module):
         self.relu1 = nn.ReLU()
         self.w2 = nn.Parameter(torch.Tensor(3, levels - 1).fill_(init))
         self.relu2 = nn.ReLU()
-        self.conv_16 = ConvBNReLU(low_chan[0], 256, ks=1, padding=0)  # 1*1卷积，如果padding=1，特征图尺寸会改变
-        self.conv_8 = ConvBNReLU(low_chan[1], 256, ks=1, padding=0)
-        self.conv_4 = ConvBNReLU(low_chan[2], 256, ks=1, padding=0)
-        self.conv_2 = ConvBNReLU(low_chan[3], 256, ks=1, padding=0)
+        self.conv_16 = ConvBNReLU(low_chan[0], 256, ks=3, padding=1)  # 1*1卷积，如果padding=1，特征图尺寸会改变
+        self.conv_8 = ConvBNReLU(low_chan[1], 256, ks=3, padding=1)
+        self.conv_4 = ConvBNReLU(low_chan[2], 256, ks=3, padding=1)
+        self.conv_2 = ConvBNReLU(low_chan[3], 256, ks=3, padding=1)
 
         # self.Poollayer = torch.nn.AvgPool2d(kernel_size=2, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None)
         # self.ppm = PSPModule(low_chan, norm_layer=nn.BatchNorm2d, out_features=256)
 
-        self.bifpn_convs = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.bifpn_convs = BifpnConvs(256, 256, kernel_size=1, padding=0)  #
+
         self.init_weight()
 
     def forward(self, feat2, feat4, feat8, feat16, feat_lkpp):  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96] feat2:[4,64,192,192]
@@ -233,7 +266,7 @@ class Decoder_BiFPN_EaNet(nn.Module):
                           w2[0, 2] + w2[1, 2] + w2[2, 2])  # bilinear
         feat4_3 = self.bifpn_convs(feat4_3)  # [4, 256, 96, 96]
 
-        return feat4_3, feat4_1
+        return feat4_3, feat4_1, [featlkpp_2, feat16_3, feat8_3]
 
     def init_weight(self):
         for ly in self.children():
