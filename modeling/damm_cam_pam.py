@@ -80,11 +80,11 @@ class _CAM_Module(nn.Module):
         m_batchsize, C, height, width = x.size()  # x:torch.Size([1, 2048, 32, 32])
         proj_query = x.view(m_batchsize, C, -1)  # 维度转换 & 转置 torch.Size([2, 512, 676])
         proj_key = x.view(m_batchsize,C,-1).permute(0,2,1)  # 维度转换 torch.Size([2, 676, 512])
-        energy = torch.bmm(proj_query, proj_key) #  相乘  torch.Size([2, 512, 512])
+        energy = torch.bmm(proj_query, proj_key)  # 相乘  torch.Size([2, 512, 512])
         energy_new = torch.max(energy, -1, keepdim=True)[0].expand_as(energy)-energy  # torch.Size([2, 512, 512]) 0
         # torch.max()用来求tensor的最大值，0是每列的最大值  keepdim=True：表示输出维度与输入一致  dim=-1与dim=1一致（在行方向上）
         # expand_as()将前面矩阵的大小扩充为后面矩阵的大小
-        attention = self.softmax(energy_new)  #  归一化 torch.Size([2, 512, 512])  0.0020
+        attention = self.softmax(energy_new)  # 归一化 torch.Size([2, 512, 512])  0.0020
         proj_value = x.view(m_batchsize, C, -1)  # torch.Size([2, 512, 676])
 
         out = torch.bmm(attention, proj_value)  # 相乘 1

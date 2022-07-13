@@ -9,3 +9,6 @@ tensorboard
 conda create --name luohuiyin python=3.8(建议直接去anaconda里面创建环境)
 activate luohuiyin
 
+使用命令行：nvidia-smi查看cuda版本，3090为11.6
+再应用外网的梯子，下载torch的安装包（要与python、cuda、windows版本相对应）
+
