@@ -143,17 +143,29 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, input):  # 16倍
+        # x = self.conv1(input)  # [1,3,513,513]-[1,64,256,256]
+        # x = self.bn1(x)  # [1,64,256,256]
+        # x = self.relu(x)
+        # x = self.maxpool(x)  # [1,64,256,256]-[1,64,128,128]
+        #
+        # x = self.layer1(x)  # [1,64,128,128]-[1,256,128,128]
+        # low_level_feat = x
+        # x = self.layer2(x)  # [1,256,128,128]-[1,512,64,64]
+        # x = self.layer3(x)  # [1,512,64,64]-[1,1024,32,32]
+        # x = self.layer4(x)  # [1,1024,32,32]-[1,2048,32,32]
+        # return x, low_level_feat
+
         x = self.conv1(input)  # [1,3,513,513]-[1,64,256,256]
         x = self.bn1(x)  # [1,64,256,256]
-        x = self.relu(x)
-        x = self.maxpool(x)  # [1,64,256,256]-[1,64,128,128]
+        x0 = self.relu(x)
+        x1 = self.maxpool(x0)  # [1,64,256,256]-[1,64,128,128]
 
-        x = self.layer1(x)  # [1,64,128,128]-[1,256,128,128]
-        low_level_feat = x
-        x = self.layer2(x)  # [1,256,128,128]-[1,512,64,64]
-        x = self.layer3(x)  # [1,512,64,64]-[1,1024,32,32]
-        x = self.layer4(x)  # [1,1024,32,32]-[1,2048,32,32]
-        return x, low_level_feat
+        x1 = self.layer1(x1)  # [1,64,128,128]-[1,256,128,128]
+        x2 = self.layer2(x1)  # [1,256,128,128]-[1,512,64,64]
+        x3 = self.layer3(x2)  # [1,512,64,64]-[1,1024,32,32]
+        x4 = self.layer4(x3)  # [1,1024,32,32]-[1,2048,32,32]
+        # return [x4, x2, x1, x0]
+        return x0, x1, x2, x3, x4
 
     """Unet
     def forward(self, input):  # 16倍
