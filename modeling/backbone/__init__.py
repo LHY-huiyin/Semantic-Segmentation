@@ -9,8 +9,8 @@ def build_backbone(backbone, output_stride, BatchNorm):  # 'resnet' 16
         # return resnetxt.resnext101()
         # return resnet50_deeplabunet.ResNet50(output_stride, BatchNorm)  # 获取5个输出
         # return resnet50_bifpn.ResNet50(output_stride, BatchNorm)
-        # return resnet101_msapp.ResNet101(output_stride, BatchNorm)  # 获取4各输出
-        return resnet101_bifpn.ResNet101(output_stride, BatchNorm)
+        return resnet101_msapp.ResNet101(output_stride, BatchNorm)  # 获取4各输出
+        # return resnet101_bifpn.ResNet101(output_stride, BatchNorm)
     elif backbone == 'xception':
         return xception.AlignedXception(output_stride, BatchNorm)
     elif backbone == 'drn':
