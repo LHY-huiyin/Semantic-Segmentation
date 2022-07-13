@@ -28,6 +28,12 @@ class ConvBNReLU(nn.Module):
         x = self.relu(x)
         return x
 
+    def init_weight(self):
+        for ly in self.children():
+            if isinstance(ly, nn.Conv2d):
+                nn.init.kaiming_normal_(ly.weight, a=1)
+                if not ly.bias is None: nn.init.constant_(ly.bias, 0)
+
 "总体架构"
 class DeepLab_EaNet_BIFPN(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
