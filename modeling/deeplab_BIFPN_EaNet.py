@@ -76,7 +76,7 @@ class DeepLab_EaNet_BIFPN(nn.Module):
         self.lkpp = LKPP(in_chan=2048, out_chan=256, mode='parallel', with_gp=cfg.aspp_global_feature)
         self.decoder = Decoder_BiFPN_EaNet(cfg.n_classes, low_chan=[1024, 512, 256, 64], num_classes=8)
         # self.conv_out = nn.Conv2d(256, num_classes, kernel_size=1, bias=False)
-        self.cov_out = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)
+        self.conv_out = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)
         self.Softmax = nn.Softmax()
         self.CoefRefine = nn.Sequential(
             nn.Conv2d(512, 64, kernel_size=1, bias=False),

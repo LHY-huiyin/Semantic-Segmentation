@@ -253,7 +253,7 @@ class Decoder_BiFPN_EaNet(nn.Module):
                 w1[0, 3] + w1[1, 3] + self.eps)
         featlkpp_2 = self.bifpn_convs(featlkpp_2)  # [4, 256, 24, 24]
         # 做损失函数的时候，没有收敛，还缺少一个步骤
-        featlkpp_loss = self.conv_out(featlkpp_2)
+        featlkpp_loss = self.conv_loss(featlkpp_2)
 
         feat16_3 = (w2[0, 0] * feat16_1 + w2[1, 0] * feat16_2 + w2[2, 0] * featlkpp_2) / (
                            w2[0, 0] + w2[1, 0] + w2[2, 0])
