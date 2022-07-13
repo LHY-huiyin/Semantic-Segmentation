@@ -198,7 +198,7 @@ class BifpnConvs(nn.Module):
 
 "解码器结构"
 class Decoder_BiFPN_EaNet(nn.Module):
-    def __init__(self, n_classes, low_chan=[1024, 512, 256, 64],  levels=4, init=0.5, eps=0.0001, *args, **kwargs):
+    def __init__(self, n_classes, low_chan=[1024, 512, 256, 64], num_classes=8, levels=4, init=0.5, eps=0.0001, *args, **kwargs):
         super(Decoder_BiFPN_EaNet, self).__init__()
         self.eps = eps
         self.levels = levels
@@ -214,7 +214,8 @@ class Decoder_BiFPN_EaNet(nn.Module):
 
         # self.Poollayer = torch.nn.AvgPool2d(kernel_size=2, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None)
         # self.ppm = PSPModule(low_chan, norm_layer=nn.BatchNorm2d, out_features=256)
-
+        # self.conv_out = nn.Conv2d(256, num_classes, kernel_size=1, bias=False)
+        self.conv_loss = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)  # supervisor的输出
         self.bifpn_convs = BifpnConvs(256, 256, kernel_size=1, padding=0)  #
 
         self.init_weight()
@@ -251,22 +252,26 @@ class Decoder_BiFPN_EaNet(nn.Module):
         featlkpp_2 = (w1[0, 3] * feat16_2 + w1[1, 3] * feat_lkpp_up) / (
                 w1[0, 3] + w1[1, 3] + self.eps)
         featlkpp_2 = self.bifpn_convs(featlkpp_2)  # [4, 256, 24, 24]
+        # 做损失函数的时候，没有收敛，还缺少一个步骤
+        featlkpp_loss = self.conv_out(featlkpp_2)
 
         feat16_3 = (w2[0, 0] * feat16_1 + w2[1, 0] * feat16_2 + w2[2, 0] * featlkpp_2) / (
                            w2[0, 0] + w2[1, 0] + w2[2, 0])
         feat16_3 = self.bifpn_convs(feat16_3)  # [4, 256, 24, 24]
+        feat16_loss = self.conv_loss(feat16_3)
 
         feat8_3 = (w2[0, 1] * feat8_1 + w2[1, 1] * feat8_2 + w2[2, 1] *
                    F.interpolate(feat16_3, scale_factor=2, mode='bilinear')) / (
                           w2[0, 1] + w2[1, 1] + w2[2, 1])  # bilinear
         feat8_3 = self.bifpn_convs(feat8_3)  # [4, 256, 48, 48]
+        feat8_loss = self.conv_loss(feat8_3)
 
         feat4_3 = (w2[0, 2] * feat4_1 + w2[1, 2] * feat4_2 + w2[2, 2] *
                    F.interpolate(feat8_3, scale_factor=2, mode='bilinear')) / (
                           w2[0, 2] + w2[1, 2] + w2[2, 2])  # bilinear
         feat4_3 = self.bifpn_convs(feat4_3)  # [4, 256, 96, 96]
 
-        return feat4_3, feat4_1, [featlkpp_2, feat16_3, feat8_3]
+        return feat4_3, feat4_1, [featlkpp_loss, feat16_loss, feat8_loss]
 
     def init_weight(self):
         for ly in self.children():

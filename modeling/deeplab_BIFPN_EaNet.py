@@ -8,6 +8,26 @@ from configs import config_factory
 
 cfg = config_factory['resnet_cityscapes']
 
+class ConvBNReLU(nn.Module):
+    def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1, dilation=1, *args, **kwargs):
+        super(ConvBNReLU, self).__init__()
+        self.conv = nn.Conv2d(in_chan,
+                              out_chan,
+                              kernel_size=ks,
+                              stride=stride,
+                              padding=padding,
+                              dilation=dilation,
+                              bias=True)
+        self.bn = nn.BatchNorm2d(out_chan)
+        self.relu = nn.ReLU(inplace=False)
+        self.init_weight()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        return x
+
 "总体架构"
 class DeepLab_EaNet_BIFPN(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
@@ -48,8 +68,9 @@ class DeepLab_EaNet_BIFPN(nn.Module):
 
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)  # 'resnet' 16 BatchNorm2d
         self.lkpp = LKPP(in_chan=2048, out_chan=256, mode='parallel', with_gp=cfg.aspp_global_feature)
-        self.decoder = Decoder_BiFPN_EaNet(cfg.n_classes, low_chan=[1024, 512, 256, 64])
-        self.conv_out = nn.Conv2d(256, num_classes, kernel_size=1, bias=False)
+        self.decoder = Decoder_BiFPN_EaNet(cfg.n_classes, low_chan=[1024, 512, 256, 64], num_classes=8)
+        # self.conv_out = nn.Conv2d(256, num_classes, kernel_size=1, bias=False)
+        self.cov_out = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)
         self.Softmax = nn.Softmax()
         self.CoefRefine = nn.Sequential(
             nn.Conv2d(512, 64, kernel_size=1, bias=False),
