@@ -8,7 +8,8 @@ class Path(object):
             # return 'G:\\loveda_aft\\'
             return 'C:\\Remote sensing semantic segmentation\\loveda_a\\'  #'G:\\Loveda_a\\'  数据集大小为512*512
             # return 'C:\\Remote sensing semantic segmentation\\loveda_last\\'  # 错误的设置：训练集348 验证集512
-            # return 'X:\\luo\\loveda_a\\'
+            # return 'X:\\luo\\loveda_a\\'  # 3080师弟电脑的路径
+            # return 'C:\\luo\\loveda_a\\'  # 3090服务器的路径
         # elif dataset == 'sbd':
         #     return '/path/to/datasets/benchmark_RELEASE/'  # folder that contains dataset/.
         # elif dataset == 'cityscapes':
