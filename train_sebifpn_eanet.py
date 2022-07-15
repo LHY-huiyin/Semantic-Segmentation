@@ -6,7 +6,7 @@ from tqdm import tqdm
 from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.EaNet import *
+from modeling.deeplab_SeBiFPN_EaNET import *
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
@@ -38,7 +38,7 @@ class Trainer(object):
         # 使用”**”调用函数,这种方式我们需要一个字典.注意:在函数调用中使用”*”，我们需要元组;
 
         # Define network
-        model = DeepLab_EaNet(backbone=args.backbone, output_stride=args.out_stride)
+        model = DeepLab_SEBIFPN_EaNet(backbone=args.backbone, output_stride=args.out_stride)
 
         # 构建一个优化参数列表
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
@@ -227,7 +227,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet50_EaNet.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet101_sebifpn_EaNet.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -306,7 +306,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=24,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=2,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
