@@ -7,7 +7,7 @@ from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from modeling.EaNet import *
-from utils.loss import SegmentationLosses
+from utils.loss import ECELoss
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
@@ -65,8 +65,10 @@ class Trainer(object):
             weight = torch.from_numpy(weight.astype(np.float32))
         else:
             weight = None  # None
-        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
-            mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
+        # self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
+        #     mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
+        self.criterion = ECELoss(n_classes=cfg.n_classes, alpha=cfg.alpha, radius=cfg.radius,
+                beta=cfg.beta, ignore_lb=cfg.ignore_label, mode=cfg.mode).cuda()
         self.model, self.optimizer = model, optimizer
 
         # Define Evaluator
@@ -227,7 +229,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet50_EaNet.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet101_EaNet_origin.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -306,7 +308,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=24,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=20,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
