@@ -229,7 +229,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet101_EaNet_origin.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet101_EaNet_origin_loss.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
