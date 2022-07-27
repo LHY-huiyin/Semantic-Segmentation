@@ -231,7 +231,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet101.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet101_512.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -250,7 +250,7 @@ class Trainer(object):
         # 数据加载器中数据的维度是[B, C, H, W]，我们每次只拿一个数据出来就是[C, H, W]，而matplotlib.pyplot.imshow要求的输入维度是[H, W, C]，
         # 所以我们需要交换一下数据维度，把通道数放到最后面，这里用到pytorch里面的permute方法（transpose方法也行，不过要交换两次，没这个方便，numpy中的transpose方法倒是可以一次交换完成）
         # 将tensor的维度换位。RGB->BGR  permute(1, 2, 0)
-        if new_pred >= 0.65:  # MIOU
+        if new_pred >= 0.75:  # MIOU
             for i, sample in enumerate(tbar):
                 if i > 5:
                     break
@@ -296,9 +296,9 @@ def main():
     parser.add_argument('--workers', type=int, default=4,
                         metavar='N', help='dataloader threads')
     # 设置多线程（threads）进行数据读取时，其实是假的多线程，他是开了N个子进程（PID是连续的）进行模拟多线程工作
-    parser.add_argument('--base-size', type=int, default=384,  # 768->384->192->96->48->24
+    parser.add_argument('--base-size', type=int, default=512,  # 768->384->192->96->48->24
                         help='base image size')
-    parser.add_argument('--crop-size', type=int, default=384,
+    parser.add_argument('--crop-size', type=int, default=512,
                         help='crop image size')  # 裁剪大小
     parser.add_argument('--sync-bn', type=bool, default=None,
                         help='whether to use sync bn (default: auto)')
@@ -312,7 +312,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=18,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=10,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
