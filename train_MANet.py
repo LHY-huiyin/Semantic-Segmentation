@@ -227,7 +227,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet50_MANet.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet50_MANet_vailingen.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -290,9 +290,9 @@ def main():
     parser.add_argument('--workers', type=int, default=4,
                         metavar='N', help='dataloader threads')
     # 设置多线程（threads）进行数据读取时，其实是假的多线程，他是开了N个子进程（PID是连续的）进行模拟多线程工作
-    parser.add_argument('--base-size', type=int, default=384,  # 768->384->192->96->48->24
+    parser.add_argument('--base-size', type=int, default=256,  # 768->384->192->96->48->24
                         help='base image size')
-    parser.add_argument('--crop-size', type=int, default=384,
+    parser.add_argument('--crop-size', type=int, default=256,
                         help='crop image size')  # 裁剪大小
     parser.add_argument('--sync-bn', type=bool, default=None,
                         help='whether to use sync bn (default: auto)')

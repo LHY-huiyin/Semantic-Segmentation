@@ -11,7 +11,9 @@ class Path(object):
             # return 'X:\\luo\\loveda_a\\'  # 3080师弟电脑的路径
             # return 'C:\\luo\\loveda_a\\'  # 3090服务器的路径
 
-            return 'H:\\datasets\\Potsdam\\'  # 改用公共数据集
+            # return 'H:\\datasets\\Potsdam\\'  # 3060的路径 Potsdam公共数据集
+            # return 'C:\\luo\\Vaihingen\\'  # 3090服务器的路径 Vaihingen数据集
+            return 'C:\\Remote sensing semantic segmentation\\Vaihingen\\'  # 3060的路径 Vaihingen数据集
         # elif dataset == 'sbd':
         #     return '/path/to/datasets/benchmark_RELEASE/'  # folder that contains dataset/.
         # elif dataset == 'cityscapes':

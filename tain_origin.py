@@ -231,7 +231,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet101_512.txt', 'a', 'utf-8') as f:
+        with codecs.open('实验记录resnet101_Vaihingen_参数调整.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -296,9 +296,9 @@ def main():
     parser.add_argument('--workers', type=int, default=4,
                         metavar='N', help='dataloader threads')
     # 设置多线程（threads）进行数据读取时，其实是假的多线程，他是开了N个子进程（PID是连续的）进行模拟多线程工作
-    parser.add_argument('--base-size', type=int, default=512,  # 768->384->192->96->48->24
+    parser.add_argument('--base-size', type=int, default=256,  # 768->384->192->96->48->24
                         help='base image size')
-    parser.add_argument('--crop-size', type=int, default=512,
+    parser.add_argument('--crop-size', type=int, default=256,
                         help='crop image size')  # 裁剪大小
     parser.add_argument('--sync-bn', type=bool, default=None,
                         help='whether to use sync bn (default: auto)')
@@ -312,7 +312,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=10,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=32,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
@@ -377,7 +377,7 @@ def main():
         epoches = {  # epoches={'coco': 30, 'cityscapes': 200, 'pascal': 50}
             'coco': 30,
             'cityscapes': 200,
-            'pascal': 1000,  # 50
+            'pascal': 1000150,  # 50
         }
         args.epochs = epoches[args.dataset.lower()]  # epochs = 50
         # args.dataset='pascal'  lower()转换字符串中所有大写字符为小写  Pascal -- pascal
@@ -392,7 +392,7 @@ def main():
         lrs = {  # lrs:{'coco': 0.1, 'cityscapes': 0.01, 'pascal': 0.007}
             'coco': 0.1,
             'cityscapes': 0.01,
-            'pascal': 0.007,
+            'pascal': 0.001,
         }
         args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size  # lr=0.0035  【0.007/4】*2
 
