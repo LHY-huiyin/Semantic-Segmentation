@@ -181,6 +181,31 @@ class BifpnConvs(nn.Module):
                 nn.init.kaiming_normal_(ly.weight, a=1)
                 if not ly.bias is None: nn.init.constant_(ly.bias, 0)
 
+class ChannelAttention(nn.Module):
+    def __init__(self, in_planes, out_planes, ratio=2):
+        super(ChannelAttention, self).__init__()
+        self.conv = nn.Conv2d(in_planes, out_planes, 1, bias=False)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        self.fc11 = nn.Conv2d(out_planes, out_planes // ratio, 1, bias=False)
+        self.fc12 = nn.Conv2d(out_planes // ratio, out_planes, 1, bias=False)
+
+        self.fc21 = nn.Conv2d(out_planes, out_planes // ratio, 1, bias=False)
+        self.fc22 = nn.Conv2d(out_planes // ratio, out_planes, 1, bias=False)
+        self.relu1 = nn.ReLU(True)
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.conv(x)
+        avg_out = self.fc12(self.relu1(self.fc11(self.avg_pool(x))))
+        max_out = self.fc22(self.relu1(self.fc21(self.max_pool(x))))
+        out = avg_out + max_out
+        del avg_out, max_out
+        return self.sigmoid(out)
+
+
 "解码器结构"
 class Decoder_SEBiFPN_EaNet(nn.Module):
     def __init__(self, n_classes, low_chan=[1024, 512, 256, 64], num_classes=8, levels=4, init=0.5, eps=0.0001, *args, **kwargs):
@@ -208,8 +233,13 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
 
         # self.Poollayer = torch.nn.AvgPool2d(kernel_size=2, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None)
         # self.ppm = PSPModule(low_chan, norm_layer=nn.BatchNorm2d, out_features=256)
-        self.conv_cat1 = nn.Conv2d(256 + 256, 256, kernel_size=1, bias=False)
-        self.conv_cat2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+
+
+        self.conv_cat_group = ChannelAttention(512, 256)
+        # self.conv_cat1 = nn.Conv2d(256 + 256, 256, kernel_size=1, bias=False)
+        # self.conv_cat2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+
+
         self.sigmoid = nn.Sigmoid()
         self.conv_loss = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)  # supervisor的输出
         self.bifpn_convs = BifpnConvs(256, 256, kernel_size=1, padding=0)  # 进行融合
@@ -243,8 +273,10 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         "采用门控的权重分配形式"
         "调整为自上而下的融合方式,以获得更多的深层特征"
         # 将feat_lkpp与feat16_1进行concat,然后进行卷积(1*1,3*3),sigmoid,全局平均池化,得到权重
-        feat16_w = torch.nn.functional.adaptive_avg_pool2d(
-            self.sigmoid(self.conv_cat2(self.conv_cat1(torch.cat((feat_lkpp_up, feat16_1), dim=1)))), (1, 1))
+        # feat16_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(torch.cat((feat_lkpp_up, feat16_1), dim=1)))), (1, 1))
+        feat16_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat(feat_lkpp_up, feat16_1), dim=1), (1,1))
+
         # 将权重应用于特征融合
         feat16_fuse1 = feat16_w * feat_lkpp_up + feat16_1 * (1 - feat16_w)
         # 经过1*1卷积,以及多尺度特征融合模块,最后经过1*1卷积,便是sebifpn的完整过程
@@ -252,25 +284,28 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
 
         H, W = feat8_1.size()[2:]
         feat16_fuse1_up = F.interpolate(feat16_fuse1, (H, W), mode='bilinear')
-        feat8_w = torch.nn.functional.adaptive_avg_pool2d(
-            self.sigmoid(self.conv_cat2(self.conv_cat1(
-                torch.cat((feat16_fuse1_up, feat8_1), dim=1)))), (1, 1))
+        # feat8_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
+        #         torch.cat((feat16_fuse1_up, feat8_1), dim=1)))), (1, 1))
+        feat8_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat(feat16_fuse1_up, feat8_1), dim=1), (1,1))
         feat8_fuse1 = feat8_w * feat16_fuse1_up + feat8_1 * (1 - feat8_w)
         feat8_fuse1 = self.bifpn_convs(feat8_fuse1)
 
         H, W = feat4_1.size()[2:]
         feat8_fuse1_up = F.interpolate(feat8_fuse1, (H, W), mode='bilinear')
-        feat4_w = torch.nn.functional.adaptive_avg_pool2d(
-            self.sigmoid(self.conv_cat2(self.conv_cat1(
-                torch.cat((feat8_fuse1_up, feat4_1), dim=1)))), (1, 1))
+        # feat4_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
+        #         torch.cat((feat8_fuse1_up, feat4_1), dim=1)))), (1, 1))
+        feat4_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat8_fuse1_up, feat4_1), dim=1)), (1, 1))
         feat4_fuse1 = feat4_w * feat8_fuse1_up + feat4_1 * (1 - feat4_w)
         feat4_fuse1 = self.bifpn_convs(feat4_fuse1)
 
         H, W = feat2_1.size()[2:]
         feat4_fuse1_up = F.interpolate(feat4_fuse1, (H, W), mode='bilinear')
-        feat2_w = torch.nn.functional.adaptive_avg_pool2d(
-            self.sigmoid(self.conv_cat2(self.conv_cat1(
-                torch.cat((feat4_fuse1_up, feat2_1), dim=1)))), (1, 1))
+        # feat2_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
+        #         torch.cat((feat4_fuse1_up, feat2_1), dim=1)))), (1, 1))
+        feat2_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat4_fuse1_up, feat2_1), dim=1)), (1, 1))
         feat2_fuse1 = feat2_w * feat4_fuse1_up + feat2_1 * (1 - feat2_w)
         feat2_fuse1 = self.bifpn_convs(feat2_fuse1)
 
