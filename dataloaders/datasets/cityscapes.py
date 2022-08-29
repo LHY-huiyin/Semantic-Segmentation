@@ -1,9 +1,8 @@
 import os
 import numpy as np
-import scipy.misc as m
 from PIL import Image
 from torch.utils import data
-from mypath import Path
+from train.mypath import Path
 from torchvision import transforms
 from dataloaders import custom_transforms as tr
 
