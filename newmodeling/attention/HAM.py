@@ -1,3 +1,4 @@
+"论文：Attentively Learning Edge Distributions for Semantic Segmentation of Remote Sensing Imagery"
 import torch
 import math
 import torch.nn as nn

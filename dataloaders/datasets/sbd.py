@@ -5,7 +5,7 @@ import numpy as np
 import scipy.io
 import torch.utils.data as data
 from PIL import Image
-from train.mypath import Path
+from mypath import Path
 
 from torchvision import transforms
 from dataloaders import custom_transforms as tr

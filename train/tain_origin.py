@@ -15,7 +15,6 @@ from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 
 import matplotlib.pyplot as plt
-import cv2
 import time
 
 import codecs

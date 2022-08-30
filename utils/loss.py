@@ -30,7 +30,7 @@ class SegmentationLosses(object):
         loss = criterion(logit, target.long())  # 交叉熵函数
         # print(loss.shape)
         if self.batch_average:
-            loss /= n
+            loss = loss / n
 
         return loss
 
@@ -48,7 +48,7 @@ class SegmentationLosses(object):
         loss = -((1 - pt) ** gamma) * logpt
 
         if self.batch_average:
-            loss /= n
+            loss = loss / n
 
         return loss
 
@@ -82,7 +82,7 @@ class ECELoss(nn.Module):
         # print(loss.shape)
 
         if self.batch_average:
-            loss /= n
+            loss = loss / n
 
         return loss
 
