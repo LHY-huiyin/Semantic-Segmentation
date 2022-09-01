@@ -65,10 +65,10 @@ class Trainer(object):
             weight = torch.from_numpy(weight.astype(np.float32))
         else:
             weight = None  # None
-        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
-            mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
-        # self.criterion = ECELoss(n_classes=cfg.n_classes, alpha=cfg.alpha, radius=cfg.radius,
-        #                          beta=cfg.beta, ignore_lb=cfg.ignore_label, mode=cfg.mode).cuda()
+        # self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
+        #     mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
+        self.criterion = ECELoss(n_classes=cfg.n_classes, alpha=cfg.alpha, radius=cfg.radius,
+                                 beta=cfg.beta, ignore_lb=cfg.ignore_label, mode=cfg.mode).cuda()
         self.model, self.optimizer = model, optimizer
 
         # Define Evaluator
