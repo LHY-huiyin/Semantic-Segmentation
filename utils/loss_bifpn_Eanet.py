@@ -16,6 +16,7 @@ class SegmentationLosses(object):
         if mode == 'ce':
             return self.CrossEntropyLoss  # 交叉熵损失函数
         elif mode == 'focal':
+            "使用添加的损失函数，做边界模块的损失"
             return self.MyLoss
         else:
             raise NotImplementedError
@@ -34,6 +35,7 @@ class SegmentationLosses(object):
 
         return loss
 
+    "添加的损失函数：涉及supervisor"
     def MyLoss(self, logit, target, supervisor, gamma=2, alpha=0.5):
         f1 = self.FocalLoss(logit, target)
         f2 = self.FocalLoss(F.upsample_bilinear(supervisor[0], scale_factor=16), target)
