@@ -81,12 +81,11 @@ class LKPBlock(nn.Module):
 
 # 设计的多尺度特征融合模块
 class AsppLuo(nn.Module):
-    def __init__(self, in_chan, out_chan, ks_list=[1, 7, 5, 3], dilation=[1, 3, 3], mode='parallel',
-                 with_gp=True,
+    def __init__(self, in_chan, out_chan, ks_list=[1, 7, 5, 3], mode='parallel', with_gp=True,
                  *args,
                  **kwargs):
         super(AsppLuo, self).__init__()
-        self.pool = nn.AdaptiveAvgPool2d(2, stride=2)
+        self.pool = nn.AdaptiveAvgPool2d((2, 2))
         self.with_gp = with_gp
         self.conv1 = LKPBlock(in_chan, out_chan, ks=ks_list[0], dilation=[1, 2, 3], mode=mode)
         self.conv2 = LKPBlock(in_chan, out_chan, ks=ks_list[1], dilation=[1, 2, 3], mode=mode)
@@ -98,7 +97,7 @@ class AsppLuo(nn.Module):
                                       ks=1)  # Conv2d(2048, 256, kernel_size=(1, 1), stride=(1, 1), padding=(1, 1))
             "此处更改了：是四层的合并融合"
             self.conv_out = ConvBNReLU(out_chan * 4, out_chan,
-                                       ks=1)  # Conv2d(1280, 256, kernel_size=(1, 1), stride=(1, 1), padding=(1, 1))
+                                       ks=1, padding=0)  # Conv2d(1280, 256, kernel_size=(1, 1), stride=(1, 1), padding=(1, 1))
         else:
             self.conv_out = ConvBNReLU(out_chan * 4, out_chan, ks=1)
 
@@ -108,8 +107,9 @@ class AsppLuo(nn.Module):
         H, W = x.size()[2:]
         "通过池化层来减少计算量，步长为2的池化"
         x1 = self.pool(x)
+        x = F.interpolate(x1, (H, W), mode="bilinear", align_corners=True)
         "conv1"
-        feat1 = self.cov1(x)
+        feat1 = self.conv1(x)
         "conv5*3 3*5"
         feat2 = self.conv2(x)
         "conv7*3 3*7"
