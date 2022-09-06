@@ -2,8 +2,8 @@ from newmodeling.backbone import resnet101_5, resnet101_4
 
 def build_backbone(backbone, output_stride, BatchNorm):  # 'resnet' 16
     if backbone == 'resnet':  # 16
-        # return resnet101_5.ResNet101(output_stride, BatchNorm)
-        return resnet101_4.ResNet101(output_stride, BatchNorm)
+        return resnet101_5.ResNet101(output_stride, BatchNorm)
+        # return resnet101_4.ResNet101(output_stride, BatchNorm)
 
         # return resnet101.ResNet101(output_stride, BatchNorm)
         # return resnet50_pointflow.ResNet50(output_stride, BatchNorm)  # 获取4各输出

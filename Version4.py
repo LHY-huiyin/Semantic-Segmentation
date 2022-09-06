@@ -7,7 +7,7 @@ from tqdm import tqdm
 from mypath import Path
 from dataloaders import make_data_loader
 from newmodeling.sync_batchnorm.replicate import patch_replication_callback
-from newmodeling.structure.Version3_deeplab import *
+from newmodeling.structure.Version4_deeplab import *
 from utils.loss import SegmentationLosses, ECELoss
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
@@ -38,7 +38,7 @@ class Trainer(object):
         # 使用”**”调用函数,这种方式我们需要一个字典.注意:在函数调用中使用”*”，我们需要元组;
 
         # Define network
-        model = Version3(backbone=args.backbone, output_stride=args.out_stride)
+        model = Version4(backbone=args.backbone, output_stride=args.out_stride)
 
         # 构建一个优化参数列表
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
@@ -65,10 +65,10 @@ class Trainer(object):
             weight = torch.from_numpy(weight.astype(np.float32))
         else:
             weight = None  # None
-        # self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
-        #     mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
-        self.criterion = ECELoss(n_classes=cfg.n_classes, alpha=cfg.alpha, radius=cfg.radius,
-                                 beta=cfg.beta, ignore_lb=cfg.ignore_label, mode=cfg.mode).cuda()
+        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
+            mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
+        # self.criterion = ECELoss(n_classes=cfg.n_classes, alpha=cfg.alpha, radius=cfg.radius,
+        #                          beta=cfg.beta, ignore_lb=cfg.ignore_label, mode=cfg.mode).cuda()
         self.model, self.optimizer = model, optimizer
 
         # Define Evaluator
@@ -229,7 +229,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('../实验记录Version3.txt', 'a', 'utf-8') as f:
+        with codecs.open('../实验记录Version4.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")

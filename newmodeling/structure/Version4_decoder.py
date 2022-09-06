@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from newmodeling.attention.PPM import *
 from newmodeling.conv.ConvBNReLU import *
-from newmodeling.newidea.aspp_luo import *
+from newmodeling.newidea.aspp_luo2 import *
 from newmodeling.attention.PAM_CAM import *
 from newmodeling.conv.decoderblock import *
 from newmodeling.conv.DoubleConv import *
@@ -15,9 +15,9 @@ class BifpnConvs(nn.Module):
         super(BifpnConvs, self).__init__()
         self.conv1 = nn.Conv2d(in_chan,
                               out_chan,
-                              kernel_size=3,
+                              kernel_size=1,
                               stride=1,
-                              padding=1,
+                              padding=0,
                               dilation=dilation,
                               bias=True)
         self.bn = nn.BatchNorm2d(out_chan)
@@ -83,117 +83,159 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         super(Decoder_SEBiFPN_EaNet, self).__init__()
         self.eps = eps
         self.levels = levels
+        # weighted
         self.w1 = nn.Parameter(torch.Tensor(2, levels).fill_(init))
         self.relu1 = nn.ReLU()
         self.w2 = nn.Parameter(torch.Tensor(3, levels - 1).fill_(init))
         self.relu2 = nn.ReLU()
+        self.conv_16_BR = ConvBNReLU(low_chan[0], 256, ks=3, padding=1)  # 1*1卷积，如果padding=1，特征图尺寸会改变
+        self.conv_8_BR = ConvBNReLU(low_chan[1], 256, ks=3, padding=1)
+        self.conv_4_BR = ConvBNReLU(low_chan[2], 256, ks=3, padding=1)
+        self.conv_2_BR = ConvBNReLU(low_chan[3], 256, ks=3, padding=1)
 
-        filters = [256, 512, 1024, 2048]
-        self.attention4 = PAM_CAM_Layer(filters[3])
-        self.attention3 = PAM_CAM_Layer(filters[2])
-        self.attention2 = PAM_CAM_Layer(filters[1])
-        self.attention1 = PAM_CAM_Layer(filters[0])
+        self.conv_fuse1 = ConvBNReLU(256, 256, ks=3, padding=1)
+        self.conv_fuse2 = ConvBNReLU(256, 256, ks=3, padding=1)
+        self.conv_fuse3 = ConvBNReLU(256, 64, ks=3, padding=1)
 
-        self.decoder4 = DoubleConv(256, filters[2])
-        self.decoder3 = DecoderBlock(filters[2], filters[1])
-        self.decoder2 = DecoderBlock(filters[1], filters[0])
+        # self.conv1_2 = nn.Conv2d(low_chan[3], 256, kernel_size=1, bias=False)
+        # self.conv1_4 = nn.Conv2d(low_chan[2], 256, kernel_size=1, bias=False)
+        # self.conv1_8 = nn.Conv2d(low_chan[1], 256, kernel_size=1, bias=False)
+        # self.conv1_16 = nn.Conv2d(low_chan[0], 256, kernel_size=1, bias=False)
 
-        self.conv_fuse3 = ConvBNReLU(filters[2], 256, ks=3, padding=1)
-        self.conv_fuse2 = ConvBNReLU(256, 64, ks=3, padding=1)
+        # self.Poollayer = torch.nn.AvgPool2d(kernel_size=2, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None)
+        # self.ppm = PSPModule(low_chan, norm_layer=nn.BatchNorm2d, out_features=256)
 
-        # self.channel = ChannelAttention(filters[3]*2, filters[3])
-        # self.fuse4 = torch.nn.functional.adaptive_avg_pool2d((1, 1))
-        # self.fuse3 = torch.nn.functional.adaptive_avg_pool2d(ChannelAttention(filters[2]*2, filters[2]))
-        # self.fuse2 = torch.nn.functional.adaptive_avg_pool2d(ChannelAttention(filters[1]*2, filters[0]))
+        "改进点version4：将上采样扩大两倍用卷积实现"
+        self.decoder = DecoderBlock(256, 256)
 
-        self.bifpn4 = BifpnConvs(filters[2], filters[2], kernel_size=1, stride=1, padding=0)
-        self.bifpn3 = BifpnConvs(filters[1], filters[1], kernel_size=3, stride=1, padding=2)
-        self.bifpn2 = BifpnConvs(filters[0], filters[0], kernel_size=3, stride=1, padding=2)
+        self.conv_cat_group = ChannelAttention(512, 256)
+        # self.conv_cat1 = nn.Conv2d(256 + 256, 256, kernel_size=1, bias=False)
+        # self.conv_cat2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
 
-        self.bifpn3up = BifpnConvs(filters[2], filters[2], kernel_size=3, stride=1, padding=1)
-        self.bifpn2up = BifpnConvs(filters[1], filters[1], kernel_size=3, stride=1, padding=1)
 
-        self.up1 = nn.Conv2d(filters[0], filters[1], kernel_size=1, stride=1, padding=0)
-        self.up2 = nn.Conv2d(filters[1], filters[2], kernel_size=1, stride=1, padding=0)
-        self.final = nn.Conv2d(filters[2], 256, kernel_size=1, stride=1, padding=0)
+        self.sigmoid = nn.Sigmoid()
+        self.conv_loss = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)  # supervisor的输出
+        self.bifpn_convs = BifpnConvs(256, 256, kernel_size=1, padding=0)  # 进行融合
+        self.gate_conv = nn.Conv2d(256, 1, kernel_size=1)
 
-        self.fuse = ConvBNReLU(filters[0], 64, ks=3, padding=1)
+        self.fuse = ConvBNReLU(64, 64, ks=3, padding=1)
         self.conv_out = nn.Conv2d(64, n_classes, kernel_size=1, bias=False)
 
         self.init_weight()
 
-    def forward(self, x1, x2, x3, x4_lkpp):  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96] feat2:[4,64,192,192]
-        # assert len(x1, x2, x3, x4) == self.levels
-        # build top-down and down-top path with stack
-        # levels = self.levels
+    def forward(self, feat2, feat4, feat8, feat16, feat_lkpp):  # feat_lkpp:[4, 256, 26, 26] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96] feat2:[4,64,192,192]
+        H, W = feat16.size()[2:]
+        feat_lkpp_up = F.interpolate(feat_lkpp, (H, W), mode='bilinear', align_corners=True)  # [4, 256, 24, 24]
+        # featlkpp_loss = self.conv_loss(feat_lkpp)
+        "对每一个编码器输出的特征图进行1*1卷积""没必要，舍弃"
+        # feat2_1 = self.conv1_2(feat2)
+        # feat4_1 = self.conv1_4(feat4)
+        # feat8_1 = self.conv1_8(feat8)
+        # feat16_1 = self.conv1_16(feat16)
+        "对每一个编码器输出的特征图进行3*3卷积"
+        feat16_3 = self.conv_16_BR(feat16)  # [4,1024,24,24] -> [4, 256, 24, 24]  3*3卷积
+        feat8_3 = self.conv_8_BR(feat8)  # [4,512,48,48] -> [4, 256, 48, 48]
+        feat4_3 = self.conv_4_BR(feat4)  # [4,256,96,96] -> [4, 256, 96, 96]
+        feat2_3 = self.conv_2_BR(feat2)  # [4,64,192,192] -> [4,256,192,192]
 
-        # weighted
-        # w relu
-        w1 = self.relu1(self.w1)  # 0.5 [[0.5,0.5,0.5,0.5],[0.5,0.5,0.5,0.5]]
-        w1 = w1 / torch.sum(w1, dim=0) + self.eps  # normalize  维度为0：因为w1为[2,4],维度0即为2：跨行求和，torch.sum(w1, dim=0)=[1,1,1,1]  [[0.4999,0.4999,0.4999,0.4999,0.4999],[0.4999,0.4999,0.4999,0.4999,0.4999]]
-        w2 = self.relu2(self.w2)  # 0.5 [[0.5,0.5],[0.5,0.5],[0.5,0.5]]  tensor([[0.3333, 0.3333],[0.3333, 0.3333], [0.3333, 0.3333]])
-        w2 = w2 / torch.sum(w2, dim=0) + self.eps  # normalize  tensor([[0.3333, 0.3333],[0.3333, 0.3333], [0.3333, 0.3333]])
-
-        # e4 = self.attention4(x4)      # [B,2048,24,24]
-        e3 = self.attention3(x3)     # [B,1024, 24, 24]
-        e2 = self.attention2(x2)    # [B,512, 48, 48]
-        e1 = self.attention1(x1)    # [b, 256, 96,96]
-
-        H, W = x3.size()[2:]
-        "对低层特征图进行2倍上采样"
-        feat_lkpp_up = F.interpolate(x4_lkpp, (H, W), mode='bilinear',
-                                     align_corners=True)  # [4, 256, 26, 26] -> [4, 256, 24, 24]
-        "e4经过3*3卷积，改变通道数，从2048调整为1024，便于与后面的特征图做相加"
-        d4 = self.decoder4(feat_lkpp_up)  # 2048 - [B,1024,24,24]
-
-        # weight4 = self.fuse4(torch.cat(d4, e3), dim=1)  #2048*2
-        # d4_add = weight4 * d4 + e3 * (1 - weight4)
-        d3_add = (w1[0, 0] * d4 + e3 * w1[1, 0]) / (w1[0, 0] + w1[1, 0] + self.eps)  # 相加必须是维度一致,大小一致  1024  48  [b,1024,24,24]
-        d3_fuse = self.bifpn4(d3_add)   # d3_fuse: [b,1024, 24,24]
-
-        "d3_fuse经过1*1卷积->反卷积->1*1卷积，得到的尺寸大小增加两倍，通道数减少一半"
-        d3 = self.decoder3(d3_fuse)   # d3: [B, 512, 48, 48]
-
-        # weight3 = self.fuse3(torch.cat(d3, e2), dim=1)
-        # d3_add = (weight3 * d3 + e2 * (1 - weight3))
-        d2_add = (w1[0, 1] * d3 + e2 * w1[1, 1]) / (w1[0, 1] + w1[1, 1] + self.eps)  # [b,512,48,48]
-        d2_fuse = self.bifpn3(d2_add)  # d2_fuse: [b,512,48,48]
-
-        d2 = self.decoder2(d2_fuse)  # d2:[2, 256, 96, 96]
-
+        "sebifpn"
+        # w1 = self.relu1(self.w1)  # [2,4]
+        # w1 = w1 / torch.sum(w1, dim=0) + self.eps
+        # w2 = self.relu2(self.w2)  # [3,3]
+        # w2 = w2 / torch.sum(w2, dim=0) + self.eps
         "采用门控的权重分配形式"
         "调整为自上而下的融合方式,以获得更多的深层特征"
-        # weight2 = self.fuse2(torch.cat(d2, e1), dim=1)
-        "将权重应用于特征融合"
-        # d2_add = weight2 * d2 + e1 * (1 - weight2)
-        d1_add = (w1[0,2] * d2 + e1 * w1[1, 2]) / (w1[0, 2] + w1[1, 2] + self.eps)  # [2, 256, 96, 96]
-        "经过1*1卷积,以及多尺度特征融合模块,最后经过1*1卷积,便是sebifpn的完整过程"
-        d1_fuse = self.bifpn2(d1_add)  # [2, 256, 96, 96]
+        # 将feat_lkpp与feat16_1进行concat,然后进行卷积(1*1,3*3),sigmoid,全局平均池化,得到权重
+        # feat16_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(torch.cat((feat_lkpp_up, feat16_1), dim=1)))), (1, 1))
+        feat16_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat_lkpp_up, feat16_3), dim=1)), (1, 1))
+
+        # 将权重应用于特征融合
+        feat16_fuse1 = feat16_w * feat_lkpp_up + feat16_3 * (1 - feat16_w)
+        # 经过1*1卷积,以及多尺度特征融合模块,最后经过1*1卷积,便是sebifpn的完整过程
+        feat16_fuse1 = self.bifpn_convs(feat16_fuse1)
+
+        "实现上采样，由e4变e3，特征图尺寸变大2倍"
+        # H, W = feat8_3.size()[2:]
+        # feat16_fuse1_up = F.interpolate(feat16_fuse1, (H, W), mode='bilinear')
+        feat16_fuse1_up = self.decoder(feat16_fuse1)
+        # feat8_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
+        #         torch.cat((feat16_fuse1_up, feat8_1), dim=1)))), (1, 1))
+        feat8_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat16_fuse1_up, feat8_3), dim=1)), (1,1))
+        feat8_fuse1 = feat8_w * feat16_fuse1_up + feat8_3 * (1 - feat8_w)
+        feat8_fuse1 = self.bifpn_convs(feat8_fuse1)
+
+        "实现上采样"
+        feat8_fuse1_up = self.decoder(feat8_fuse1)
+        # H, W = feat4_3.size()[2:]
+        # feat8_fuse1_up = F.interpolate(feat8_fuse1, (H, W), mode='bilinear')
+        # feat4_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
+        #         torch.cat((feat8_fuse1_up, feat4_1), dim=1)))), (1, 1))
+        feat4_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat8_fuse1_up, feat4_3), dim=1)), (1, 1))
+        feat4_fuse1 = feat4_w * feat8_fuse1_up + feat4_3 * (1 - feat4_w)
+        feat4_fuse1 = self.bifpn_convs(feat4_fuse1)
+
+        "实现上采样"
+        feat4_fuse1_up = self.decoder(feat4_fuse1)
+        # H, W = feat2_3.size()[2:]
+        # feat4_fuse1_up = F.interpolate(feat4_fuse1, (H, W), mode='bilinear')
+        # feat2_w = torch.nn.functional.adaptive_avg_pool2d(
+        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
+        #         torch.cat((feat4_fuse1_up, feat2_1), dim=1)))), (1, 1))
+        feat2_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat4_fuse1_up, feat2_3), dim=1)), (1, 1))
+        feat2_fuse1 = feat2_w * feat4_fuse1_up + feat2_3 * (1 - feat2_w)
+        feat2_fuse1 = self.bifpn_convs(feat2_fuse1)
 
         # 自底向上融合,三个特征图的融合
         # 门控的实现：经过nn.Conv2d(256, 1, kernel_size=1)，以及sigmoid函数，作为一个权重
-        d1_fuse_up = self.up1(d1_fuse)  #[2, 512, 96, 96]
-        dup2 = (w2[0, 0] * F.max_pool2d(d1_fuse_up, kernel_size=2) + w2[1, 0] * d2_fuse +
-                w2[2, 0] * e2) / (w2[0,0] + w2[1,0] + w2[2,0] + self.eps)  # 维度都必须为512  [B, 512,48,48]
-        dup2_fuse = self.bifpn2up(dup2)   # [B,512,48,48]
+        gate_feat4 = self.sigmoid(self.gate_conv(feat4_fuse1))
+        gate_feat4_other = self.sigmoid(self.gate_conv(feat4_3)) * feat4_3 + self.sigmoid(
+            self.gate_conv(F.max_pool2d(feat2_fuse1, kernel_size=2))) * F.max_pool2d(feat2_fuse1, kernel_size=2)
+        feat4_fuse2 = gate_feat4 * feat4_fuse1 + (1 - gate_feat4) * gate_feat4_other
+        feat4_fuse2 = self.bifpn_convs(feat4_fuse2)
+        # feat4_loss = self.conv_loss(feat4_fuse2)
 
-        dup2_fuse_up = self.up2(dup2_fuse)#[b,1024,48,48]
-        dup3 = (w2[0,1] * F.max_pool2d(dup2_fuse_up, kernel_size=2) + w2[1,1] * d3_fuse +
-                w2[2, 1] * e3) / (w2[0,1] + w2[1,1] + w2[2,2] + self.eps)  # 维度都为1024   [2, 1024,24,24]
-        dup3_fuse = self.bifpn3up(dup3)  # [n,1024,24,24]
+        "最大池化来改变特征图，下采样"
+        # H, W = feat8_3.size()[2:]
+        # feat4_fuse2_up = F.interpolate(feat4_fuse2, (H, W), mode='nearest')
+        feat4_fuse2_up = F.max_pool2d(feat4_fuse2, kernel_size=2)
+        gate_feat8 = self.sigmoid(self.gate_conv(feat8_fuse1))
+        gate_feat8_other = self.sigmoid(self.gate_conv(feat8_3)) * feat8_3 + self.sigmoid(
+            self.gate_conv(feat4_fuse2_up)) * feat4_fuse2_up
+        feat8_fuse2 = gate_feat8 * feat8_fuse1 + (1 - gate_feat8) * gate_feat8_other
+        feat8_fuse2 = self.bifpn_convs(feat8_fuse2)
+        # feat8_loss = self.conv_loss(feat8_fuse2)
+
+        "下采样，使用最大池化"
+        feat8_fuse2_up = F.max_pool2d(feat8_fuse2, kernel_size=2)
+        # H, W = feat16_3.size()[2:]
+        # feat8_fuse2_up = F.interpolate(feat8_fuse2, (H, W), mode='nearest')
+        gate_feat16 = self.sigmoid(self.gate_conv(feat16_fuse1))
+        gate_feat16_other = self.sigmoid(self.gate_conv(feat16_3)) * feat16_3 + self.sigmoid(
+            self.gate_conv(feat8_fuse2_up)) * feat8_fuse2_up
+        feat16_fuse2 = gate_feat16 * feat16_fuse1 + (1 - gate_feat16) * gate_feat16_other
+        feat16_fuse2 = self.bifpn_convs(feat16_fuse2)
+        # feat16_loss = self.conv_loss(feat16_fuse2)
 
         "上采样"
-        "将特征图进行简单粗暴地相加"
-        # deco3 = self.conv_fuse3(d4 + dup3_fuse)  #[b,256,24,24]
+        # 将三个特征图进行简单粗暴地相加
+        feat_out = self.conv_fuse1(feat16_3 + feat16_fuse2 + feat_lkpp_up)
 
-        deco3 = self.decoder3(d4 + dup3_fuse)  #[b,512,48,48]
-        # H, W = dup2_fuse.size()[2:]
-        # deco3 = F.interpolate(deco3, (H, W), mode='bilinear') #[b,256,48,48]
+        "实现上采样"
+        feat_out = self.decoder(feat_out)
+        # H, W = feat8_fuse2.size()[2:]
+        # feat_out = F.interpolate(feat_out, (H, W), mode='bilinear')
+        feat_out = self.conv_fuse2(feat8_3 + feat8_fuse2 + feat_out)
 
-        # deco2 = self.conv_fuse2(deco3 + dup2_fuse)
-        deco2 = self.decoder2(deco3 + dup2_fuse)  # [b,256,96.96]
+        "实现上采样"
+        feat_out = self.decoder(feat_out)
+        # H, W = feat4_fuse2.size()[2:]
+        # feat_out = F.interpolate(feat_out, (H, W), mode='bilinear', align_corners=True)
+        feat_out = self.conv_fuse3(feat4_3 + feat4_fuse2 + feat_out)
 
-        logits = self.conv_out(self.fuse(deco2))  # [b,8,96,96]
+        logits = self.conv_out(self.fuse(feat_out))
 
         # return logits, [featlkpp_loss, feat16_loss, feat8_loss]
         return logits

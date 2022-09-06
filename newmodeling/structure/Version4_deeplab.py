@@ -1,5 +1,5 @@
 from newmodeling.backbone import build_backbone
-from newmodeling.structure.Version3_decoder import *
+from newmodeling.structure.Version4_decoder import *
 from configs import config_factory
 from newmodeling.newidea.aspp_luo import *
 cfg = config_factory['resnet_cityscapes']
@@ -164,10 +164,10 @@ class LKPP(nn.Module):
 
 
 "总体架构"
-class Version3(nn.Module):
+class Version4(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
                  sync_bn=True, freeze_bn=False):
-        super(Version3, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
+        super(Version4, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
         if backbone == 'drn':  # 深度残差网络
             output_stride = 8  # 卷积输出时缩小的倍数  224/7=32
 
@@ -219,10 +219,10 @@ class Version3(nn.Module):
         H, W = x.size()[2:]  # 256 256
         # feat2, feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
         # feat_lkpp = self.lkpp(feat32)  # [4, 256, 26, 26]
-        x1, x2, x3, x4 = self.backbone(x)
+        x0, x1, x2, x3, x4 = self.backbone(x)
         # x4_lkpp = self.lkpp_luo(x4)
         x4_lkpp = self.lkpp(x4)
-        logits = self.decoder(x1, x2, x3, x4_lkpp)  # p2_in p2_out:[4,256,96,96]
+        logits = self.decoder(x0, x1, x2, x3, x4_lkpp)  # p2_in p2_out:[4,256,96,96]
         "进行4倍上采样"
         logits = F.interpolate(logits, (H, W), mode='bilinear', align_corners=True)  # [4, 8, 96, 96]-># [4, 8, 384, 384]
 
@@ -277,7 +277,7 @@ class Version3(nn.Module):
 
 if __name__ == "__main__":
     # model = DeepLab(backbone='mobilenet', output_stride=16)
-    model = Version3(backbone='resnet', output_stride=16)
+    model = Version4(backbone='resnet', output_stride=16)
     model.eval()  # 不启用 BatchNormalization 和 Dropout，保证BN和dropout不发生变化
     input = torch.rand(4, 3, 384, 384)  # RGB是三通道
     output = model(input)
