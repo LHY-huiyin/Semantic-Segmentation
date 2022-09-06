@@ -89,11 +89,12 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         self.relu2 = nn.ReLU()
 
         filters = [256, 512, 1024, 2048]
+        "引入注意力机制，不是卷积层的操作"
         self.attention4 = PAM_CAM_Layer(filters[3])
         self.attention3 = PAM_CAM_Layer(filters[2])
         self.attention2 = PAM_CAM_Layer(filters[1])
         self.attention1 = PAM_CAM_Layer(filters[0])
-
+        "引入两个卷积操作《计算量暴涨》"
         self.decoder4 = DoubleConv(256, filters[2])
         self.decoder3 = DecoderBlock(filters[2], filters[1])
         self.decoder2 = DecoderBlock(filters[1], filters[0])
@@ -105,7 +106,7 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         # self.fuse4 = torch.nn.functional.adaptive_avg_pool2d((1, 1))
         # self.fuse3 = torch.nn.functional.adaptive_avg_pool2d(ChannelAttention(filters[2]*2, filters[2]))
         # self.fuse2 = torch.nn.functional.adaptive_avg_pool2d(ChannelAttention(filters[1]*2, filters[0]))
-
+        "此处的输入和输出通道数全部变化了"
         self.bifpn4 = BifpnConvs(filters[2], filters[2], kernel_size=1, stride=1, padding=0)
         self.bifpn3 = BifpnConvs(filters[1], filters[1], kernel_size=3, stride=1, padding=2)
         self.bifpn2 = BifpnConvs(filters[0], filters[0], kernel_size=3, stride=1, padding=2)
@@ -117,6 +118,7 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         self.up2 = nn.Conv2d(filters[1], filters[2], kernel_size=1, stride=1, padding=0)
         self.final = nn.Conv2d(filters[2], 256, kernel_size=1, stride=1, padding=0)
 
+        "Version2的版本中的更改，输入通道数"
         self.fuse = ConvBNReLU(filters[0], 64, ks=3, padding=1)
         self.conv_out = nn.Conv2d(64, n_classes, kernel_size=1, bias=False)
 
@@ -148,6 +150,7 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
 
         # weight4 = self.fuse4(torch.cat(d4, e3), dim=1)  #2048*2
         # d4_add = weight4 * d4 + e3 * (1 - weight4)
+        "权重固定"
         d3_add = (w1[0, 0] * d4 + e3 * w1[1, 0]) / (w1[0, 0] + w1[1, 0] + self.eps)  # 相加必须是维度一致,大小一致  1024  48  [b,1024,24,24]
         d3_fuse = self.bifpn4(d3_add)   # d3_fuse: [b,1024, 24,24]
 
@@ -172,7 +175,9 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
 
         # 自底向上融合,三个特征图的融合
         # 门控的实现：经过nn.Conv2d(256, 1, kernel_size=1)，以及sigmoid函数，作为一个权重
+        "通道数改变"
         d1_fuse_up = self.up1(d1_fuse)  #[2, 512, 96, 96]
+        "最大池化来缩小特征图，下采样"
         dup2 = (w2[0, 0] * F.max_pool2d(d1_fuse_up, kernel_size=2) + w2[1, 0] * d2_fuse +
                 w2[2, 0] * e2) / (w2[0,0] + w2[1,0] + w2[2,0] + self.eps)  # 维度都必须为512  [B, 512,48,48]
         dup2_fuse = self.bifpn2up(dup2)   # [B,512,48,48]
@@ -185,11 +190,11 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         "上采样"
         "将特征图进行简单粗暴地相加"
         # deco3 = self.conv_fuse3(d4 + dup3_fuse)  #[b,256,24,24]
-
+        "在Version2的版本上，更改了上采样的卷积：conv_fuse是一层3*3卷积，而decoder是将特征图的通道数变一半以及尺寸变2倍"
         deco3 = self.decoder3(d4 + dup3_fuse)  #[b,512,48,48]
         # H, W = dup2_fuse.size()[2:]
         # deco3 = F.interpolate(deco3, (H, W), mode='bilinear') #[b,256,48,48]
-
+        "在Version2的版本上，更改了上采样的卷积：conv_fuse是一层3*3卷积，而decoder是将特征图的通道数变一半以及尺寸变2倍"
         # deco2 = self.conv_fuse2(deco3 + dup2_fuse)
         deco2 = self.decoder2(deco3 + dup2_fuse)  # [b,256,96.96]
 
