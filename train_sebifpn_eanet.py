@@ -1,5 +1,7 @@
 import argparse
 import os
+
+import cv2
 import numpy as np
 from tqdm import tqdm
 
@@ -15,10 +17,12 @@ from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 
 import matplotlib.pyplot as plt
+from PIL import Image
 import time
 
 import codecs
 from dataloaders.utils import decode_segmap
+
 
 class Trainer(object):
     def __init__(self, args):
@@ -137,7 +141,7 @@ class Trainer(object):
             train_loss += loss.item()  # 4.322970390319824递增
             # item()返回loss的值，叠加之后算出总loss，最后再除以mini-batches的数量，取loss平均值。
             tbar.set_description('Train loss: %.3f' % (
-                        train_loss / (i + 1)))  # 显示，前面时损失值：train_loss,后面是进度条：Train loss: 0.682:  31%|███       |
+                    train_loss / (i + 1)))  # 显示，前面时损失值：train_loss,后面是进度条：Train loss: 0.682:  31%|███       |
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
             # 数据保存在文件里面供可视化使用，代码运行结束后，会在当前的工作目录下自动生一个 runs 目录
 
@@ -148,7 +152,7 @@ class Trainer(object):
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
         print('[Epoch: %d, numImages: %5d]' % (
-        epoch, i * self.args.batch_size + image.data.shape[0]))  # [Epoch: 0, numImages:  1156]
+            epoch, i * self.args.batch_size + image.data.shape[0]))  # [Epoch: 0, numImages:  1156]
         print('Loss: %.3f' % train_loss)  # Loss: 340.250
 
         if self.args.no_val:
@@ -226,7 +230,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('../实验记录resnet101_sebifpn_EaNet_8.28.txt', 'a', 'utf-8') as f:
+        with codecs.open('./实验记录resnet101_sebifpn_EaNet_8.28.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -245,7 +249,7 @@ class Trainer(object):
         # 数据加载器中数据的维度是[B, C, H, W]，我们每次只拿一个数据出来就是[C, H, W]，而matplotlib.pyplot.imshow要求的输入维度是[H, W, C]，
         # 所以我们需要交换一下数据维度，把通道数放到最后面，这里用到pytorch里面的permute方法（transpose方法也行，不过要交换两次，没这个方便，numpy中的transpose方法倒是可以一次交换完成）
         # 将tensor的维度换位。RGB->BGR  permute(1, 2, 0)
-        if new_pred >= 0.59:  # MIOU
+        if new_pred >= 0.01:  # MIOU
             for i, sample in enumerate(tbar):
                 image, target = sample['image'], sample['label']
                 if self.args.cuda:
@@ -258,16 +262,18 @@ class Trainer(object):
                 pred = np.argmax(pred, axis=1)  # (12, 512, 512)
                 # pred = decode_segmap(pred, dataset='pascal')
 
-                # 从这里开始
-                plt.figure(figsize=(25, 25))
-                for j in range(4):
+                for j in range(2):
                     # print(pred[i].shape)     #(512, 512)
-                    plt.subplot(2, 2, j + 1)  # 需要注意的是所有的数字不能超过10
+                    plt.subplot(2, 1, j + 1)  # 需要注意的是所有的数字不能超过10
                     tmp = np.array(pred[j]).astype(np.uint8)  # (512,512)
                     segmap = decode_segmap(tmp, dataset='pascal')  # (3, 512, 512)
-                    plt.imshow(segmap)  # ([256, 256, 1])
-                    plt.axis('off')
-                plt.show()
+                    # plt.imshow(segmap)  # ([256, 256, 1])
+                    # plt.axis('off')
+                    image_name = "./RESULT/" + str(i) + '_' + str(j) + '.jpg'
+                    segmap = segmap[:, :, ::-1] * 255
+                    segmap = segmap.astype(np.uint8)
+                    cv2.imwrite(image_name, segmap)
+                # plt.show()
 
 
 def main():
