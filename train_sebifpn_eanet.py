@@ -262,13 +262,15 @@ class Trainer(object):
                 pred = np.argmax(pred, axis=1)  # (12, 512, 512)
                 # pred = decode_segmap(pred, dataset='pascal')
 
+                "j的值为bach_size的值"
                 for j in range(2):
                     # print(pred[i].shape)     #(512, 512)
-                    plt.subplot(2, 1, j + 1)  # 需要注意的是所有的数字不能超过10
+                    # plt.subplot(2, 1, j + 1)  # 需要注意的是所有的数字不能超过10
                     tmp = np.array(pred[j]).astype(np.uint8)  # (512,512)
                     segmap = decode_segmap(tmp, dataset='pascal')  # (3, 512, 512)
                     # plt.imshow(segmap)  # ([256, 256, 1])
                     # plt.axis('off')
+                    "opencv保存彩色图片"
                     image_name = "./RESULT/" + str(i) + '_' + str(j) + '.jpg'
                     segmap = segmap[:, :, ::-1] * 255
                     segmap = segmap.astype(np.uint8)
