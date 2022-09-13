@@ -74,4 +74,5 @@ class PAM_CAM_Layer(nn.Module):
         self.CAM = CAM_Module()
 
     def forward(self, x):
+        # 论文中的双注意力机制
         return self.PAM(x) + self.CAM(x)

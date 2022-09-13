@@ -131,6 +131,7 @@ class DAMM(nn.Module):
         x1 = self.damm1(x)  # torch.Size([1, 2048, 32, 32])
         x2 = self.damm2(x)
         x = x1 + x2
+        "自己写的代码"
         x = self.conv1(x)
 
         return x  # [1,256,32,32]
