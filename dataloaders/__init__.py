@@ -12,8 +12,8 @@ def make_data_loader(args, **kwargs):
 
         num_class = train_set.NUM_CLASSES  # 若使用sbd数据集
         num_class = 8  # LoveDA数据集的类别数
-        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **kwargs)
-        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, **kwargs)
+        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, drop_last=True, **kwargs)
+        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, drop_last=True, **kwargs)
         test_loader = None
 
         return train_loader, val_loader, test_loader, num_class
@@ -23,9 +23,9 @@ def make_data_loader(args, **kwargs):
         val_set = cityscapes.CityscapesSegmentation(args, split='val')
         test_set = cityscapes.CityscapesSegmentation(args, split='test')
         num_class = train_set.NUM_CLASSES
-        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **kwargs)
-        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, **kwargs)
-        test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, **kwargs)
+        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, drop_last=True, **kwargs)
+        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, drop_last=True, **kwargs)
+        test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, drop_last=True, **kwargs)
 
         return train_loader, val_loader, test_loader, num_class
 
