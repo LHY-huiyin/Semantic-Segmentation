@@ -250,7 +250,7 @@ class Trainer(object):
         # 数据加载器中数据的维度是[B, C, H, W]，我们每次只拿一个数据出来就是[C, H, W]，而matplotlib.pyplot.imshow要求的输入维度是[H, W, C]，
         # 所以我们需要交换一下数据维度，把通道数放到最后面，这里用到pytorch里面的permute方法（transpose方法也行，不过要交换两次，没这个方便，numpy中的transpose方法倒是可以一次交换完成）
         # 将tensor的维度换位。RGB->BGR  permute(1, 2, 0)
-        if new_pred >= 0.1:  # MIOU
+        if new_pred >= 0.45:  # MIOU
             for i, sample in enumerate(tbar):
                 image, target = sample['image'], sample['label']
                 if self.args.cuda:
