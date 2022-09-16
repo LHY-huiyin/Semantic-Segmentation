@@ -48,6 +48,7 @@ class Trainer(object):
         # # Define Optimizer  ******优化器***** 是算一个batch计算一次梯度，然后进行一次梯度更新
         # optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
         #                             weight_decay=args.weight_decay, nesterov=args.nesterov)
+        "有两个MACUNET文件，由于看实验记录的命名，得知都是作对比实验的程序跑的，这两个的区别：损失函数不同"
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         # 随机梯度下降SGD：nesterov具有预测能力，
