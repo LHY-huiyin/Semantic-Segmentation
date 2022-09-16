@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.aspp import build_aspp, PSPModule
-from modeling.backbone import build_backbone
+from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from newmodeling.aspp import build_aspp
+from newmodeling.attention.PPM import PSPModule
+from newmodeling.backbone import build_backbone
 from configs import config_factory
 
 cfg = config_factory['resnet_cityscapes']
