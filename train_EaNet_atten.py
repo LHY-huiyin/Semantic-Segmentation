@@ -64,6 +64,7 @@ class Trainer(object):
             weight = torch.from_numpy(weight.astype(np.float32))
         else:
             weight = None  # None
+        "损失函数不对,EaNet使用的是ECEloss"
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
             mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
         self.model, self.optimizer = model, optimizer
