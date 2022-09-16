@@ -74,7 +74,7 @@ class InvertedResidual(nn.Module):  # 倒置的残差连接
             x = self.conv(x_pad)   # if决定的：是否残差，而它们都是要做expand_ratio = 6
         return x
 
-"""原本"""
+"""原本
 class MobileNetV2(nn.Module):
     def __init__(self, output_stride=8, BatchNorm=None, width_mult=1., pretrained=True):
         super(MobileNetV2, self).__init__()
@@ -156,8 +156,8 @@ class MobileNetV2(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-
 """
+
 class MobileNetV2(nn.Module):
     def __init__(self, output_stride=8, BatchNorm=None, width_mult=1., pretrained=True):
         super(MobileNetV2, self).__init__()
@@ -245,7 +245,7 @@ class MobileNetV2(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-"""
+
 
 if __name__ == "__main__":
     input = torch.rand(1, 3, 512, 512)
