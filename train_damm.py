@@ -1,5 +1,6 @@
 import argparse
 import os
+import cv2
 import numpy as np
 from tqdm import tqdm
 
@@ -249,7 +250,7 @@ class Trainer(object):
         # 数据加载器中数据的维度是[B, C, H, W]，我们每次只拿一个数据出来就是[C, H, W]，而matplotlib.pyplot.imshow要求的输入维度是[H, W, C]，
         # 所以我们需要交换一下数据维度，把通道数放到最后面，这里用到pytorch里面的permute方法（transpose方法也行，不过要交换两次，没这个方便，numpy中的transpose方法倒是可以一次交换完成）
         # 将tensor的维度换位。RGB->BGR  permute(1, 2, 0)
-        if new_pred >= 0.59:  # MIOU
+        if new_pred >= 0.50:  # MIOU
             for i, sample in enumerate(tbar):
                 image, target = sample['image'], sample['label']
                 if self.args.cuda:
@@ -263,15 +264,20 @@ class Trainer(object):
                 # pred = decode_segmap(pred, dataset='pascal')
 
                 # 从这里开始
-                plt.figure(figsize=(25, 25))
-                for j in range(4):
+                # plt.figure(figsize=(25, 25))
+                for j in range(14):
                     # print(pred[i].shape)     #(512, 512)
-                    plt.subplot(2, 2, j + 1)  # 需要注意的是所有的数字不能超过10
+                    # plt.subplot(2, 2, j + 1)  # 需要注意的是所有的数字不能超过10
                     tmp = np.array(pred[j]).astype(np.uint8)  # (512,512)
                     segmap = decode_segmap(tmp, dataset='pascal')  # (3, 512, 512)
-                    plt.imshow(segmap)  # ([256, 256, 1])
-                    plt.axis('off')
-                plt.show()
+                    # plt.imshow(segmap)  # ([256, 256, 1])
+                    # plt.axis('off')
+                    "opencv保存彩色图片"
+                    image_name = "./RESULT/DAMM/" + str(i) + '_' + str(j) + '.jpg'
+                    segmap = segmap[:, :, ::-1] * 255
+                    segmap = segmap.astype(np.uint8)
+                    cv2.imwrite(image_name, segmap)
+                # plt.show()
 
 
 def main():
@@ -309,7 +315,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=18,  # 2,4,8,12,14
+    parser.add_argument('--batch-size', type=int, default=14,  # 2,4,8,12,14
                         metavar='N', help='input batch size for \
                                 training (default: auto)')  # 每批数据量的大小。一次（1个iteration）一起训练batchsize个样本，计算它们的平均损失函数值，来更新参数
     # batchsize越小，一个batch中的随机性越大，越不易收敛。
