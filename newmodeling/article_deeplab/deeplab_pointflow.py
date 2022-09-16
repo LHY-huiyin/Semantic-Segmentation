@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.aspp_origin import build_aspp
-from modeling.decoder_origin import build_decoder
-from modeling.backbone import build_backbone
-from modeling.point_flow import PointFlowModuleWithMaxAvgpool
-from modeling.pointflow_PPM import PSPModule
+from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+# from newmodeling.aspp import *
+from newmodeling.decoder import build_decoder
+from newmodeling.backbone import build_backbone
+from newmodeling.articlecode.PointFlow import PointFlowModuleWithMaxAvgpool
+from newmodeling.attention.PPM import PSPModule
 
 def pointflow_conv3x3(in_planes, out_planes, stride=1):
     """ 3x3 convolution with padding """
@@ -185,8 +185,8 @@ class DeepLab(nn.Module):
             BatchNorm = nn.BatchNorm2d  # 数据的归一化处理   y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
 
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)  # 'resnet' 16 BatchNorm2d
-        self.aspp = build_aspp(backbone, output_stride, BatchNorm)
-        self.decoder = build_decoder(num_classes, backbone, BatchNorm)
+        # self.aspp = build_aspp(backbone, output_stride, BatchNorm)
+        # self.decoder = build_decoder(num_classes, backbone, BatchNorm)
 
         self.freeze_bn = freeze_bn
         self.head = UperNetAlignHeadMaxAvgpool(pointflow_chs,  num_class=num_classes, norm_layer=BatchNorm,

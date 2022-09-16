@@ -7,8 +7,8 @@ from tqdm import tqdm
 
 from mypath import Path
 from dataloaders import make_data_loader
-from modeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.deeplab_pointfolw import *
+from newmodeling.sync_batchnorm.replicate import patch_replication_callback
+from newmodeling.article_deeplab.deeplab_pointflow import *
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
