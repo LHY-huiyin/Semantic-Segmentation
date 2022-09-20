@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.backbone import build_backbone
-from modeling.decoder_BIFPN_EaNet import *
+from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from newmodeling.backbone import build_backbone
+from newmodeling.compare.decoder_Sebifpn import *
 from configs import config_factory
 
 cfg = config_factory['resnet_cityscapes']
@@ -35,10 +35,10 @@ class ConvBNReLU(nn.Module):
                 if not ly.bias is None: nn.init.constant_(ly.bias, 0)
 
 "总体架构"
-class DeepLab_EaNet_BIFPN(nn.Module):
+class DeepLab_SeBIFPN(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
                  sync_bn=True, freeze_bn=False):
-        super(DeepLab_EaNet_BIFPN, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
+        super(DeepLab_SeBIFPN, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
         if backbone == 'drn':  # 深度残差网络
             output_stride = 8  # 卷积输出时缩小的倍数  224/7=32
 
@@ -73,7 +73,7 @@ class DeepLab_EaNet_BIFPN(nn.Module):
             BatchNorm = nn.BatchNorm2d  # 数据的归一化处理   y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
 
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)  # 'resnet' 16 BatchNorm2d
-        self.lkpp = LKPP(in_chan=2048, out_chan=256, mode='parallel', with_gp=cfg.aspp_global_feature)
+        self.conv = ConvBNReLU(2048, 256, kernel_size=1, bias=False)
         self.decoder = Decoder_BiFPN_EaNet(cfg.n_classes, low_chan=[1024, 512, 256, 64], num_classes=8)
         # self.conv_out = nn.Conv2d(256, num_classes, kernel_size=1, bias=False)
         self.conv_out = ConvBNReLU(256, num_classes, kernel_size=1, bias=False)
@@ -87,8 +87,9 @@ class DeepLab_EaNet_BIFPN(nn.Module):
     def forward(self, x):
         H, W = x.size()[2:]  # 256 256
         feat2, feat4, feat8, feat16, feat32 = self.backbone(x)  # resnet:feat32:[4,2048,24,24] feat16:[4,1024,24,24] feat8:[4,512,48,48] feat4:[4,256,96,96]
-        feat_lkpp = self.lkpp(feat32)  # [4, 256, 26, 26]
-        p2_out, p2_in, supervisor = self.decoder(feat2, feat4, feat8, feat16, feat_lkpp)  # p2_in p2_out:[4,256,96,96]
+        "SeBiFPN中没有LKPP,调整通道数为256"
+        feat32 = self.conv(feat32)
+        p2_out, p2_in, supervisor = self.decoder(feat2, feat4, feat8, feat16, feat32)  # p2_in p2_out:[4,256,96,96]
 
         "进行边界上采样"
         p2_out_1 = self.conv_out(p2_out)  # [4, 8, 96,96]
@@ -135,7 +136,7 @@ class DeepLab_EaNet_BIFPN(nn.Module):
                                 yield p
 
     def get_10x_lr_params(self):
-        modules = [self.lkpp, self.decoder]
+        modules = [self.decoder]
         for i in range(len(modules)):
             for m in modules[i].named_modules():
                 if self.freeze_bn:
@@ -153,7 +154,7 @@ class DeepLab_EaNet_BIFPN(nn.Module):
 
 if __name__ == "__main__":
     # model = DeepLab(backbone='mobilenet', output_stride=16)
-    model = DeepLab_EaNet_BIFPN(backbone='resnet', output_stride=16)
+    model = DeepLab_SeBIFPN(backbone='resnet', output_stride=16)
     model.eval()  # 不启用 BatchNormalization 和 Dropout，保证BN和dropout不发生变化
     input = torch.rand(4, 3, 384, 384)  # RGB是三通道
     output = model(input)

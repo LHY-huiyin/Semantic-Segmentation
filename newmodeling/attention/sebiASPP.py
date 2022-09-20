@@ -5,11 +5,11 @@ import torch.nn.functional as F
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
 class _ASPPModule(nn.Module):
-    def __init__(self, inplanes, planes, kernel_size, padding, dilation, BatchNorm):
+    def __init__(self, inplanes, planes, kernel_size, padding, dilation):
         super(_ASPPModule, self).__init__()
         self.atrous_conv = nn.Conv2d(inplanes, planes, kernel_size=kernel_size,  # k=2*5-3=7 out=[in-7(k)+6(padding))/1(stride)]+1=in    out = in
                                             stride=1, padding=padding, dilation=dilation, bias=False)  # 空洞卷积  -> [batch, 256,  h, w]
-        self.bn = BatchNorm(planes)
+        self.bn = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU()
 
         self._init_weight()
@@ -31,34 +31,22 @@ class _ASPPModule(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-class ASPP(nn.Module):
-    def __init__(self, backbone, output_stride, BatchNorm):
-        super(ASPP, self).__init__()
-        if backbone == 'drn':
-            inplanes = 512
-        elif backbone == 'mobilenet':
-            inplanes = 320
-        else:
-            inplanes = 2048  # backbone = 'resnet'
+class SeBiFPNASPP(nn.Module):
+    def __init__(self, inplanes):
+        super(SeBiFPNASPP, self).__init__()
+        # if output_stride == 16:  # output_stride = 16
+        #     dilations = [1, 6, 12, 18]
+        # elif output_stride == 8:
+        #     dilations = [1, 12, 24, 36]
+        # else:
+        #     raise NotImplementedError
+        "四个卷积层：1,3,5,跳跃连接；特征图通道数变少"
+        self.aspp1 = _ASPPModule(inplanes, 256, 1, padding=0, dilation=1)  # padding=0 dilation=1   -> [batch, 256,  h, w]
+        self.aspp2 = _ASPPModule(inplanes, 256, 3, padding=3, dilation=3)  # padding=6 dilation=6  -> [batch, 256,  h, w]
+        self.aspp3 = _ASPPModule(inplanes, 256, 3, padding=5, dilation=5)  # padding=12 dilation=12 out=in -> [batch, 256,  h, w]
 
-        if output_stride == 16:  # output_stride = 16
-            dilations = [1, 6, 12, 18]
-        elif output_stride == 8:
-            dilations = [1, 12, 24, 36]
-        else:
-            raise NotImplementedError
-
-        self.aspp1 = _ASPPModule(inplanes, 256, 1, padding=0, dilation=dilations[0], BatchNorm=BatchNorm)  # padding=0 dilation=1   -> [batch, 256,  h, w]
-        self.aspp2 = _ASPPModule(inplanes, 256, 3, padding=dilations[1], dilation=dilations[1], BatchNorm=BatchNorm)  # padding=6 dilation=6  -> [batch, 256,  h, w]
-        self.aspp3 = _ASPPModule(inplanes, 256, 3, padding=dilations[2], dilation=dilations[2], BatchNorm=BatchNorm)  # padding=12 dilation=12 out=in -> [batch, 256,  h, w]
-        self.aspp4 = _ASPPModule(inplanes, 256, 3, padding=dilations[3], dilation=dilations[3], BatchNorm=BatchNorm)  # padding=18 dilation=18 out=in -> [batch, 256,  h, w]
-
-        self.global_avg_pool = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)),  # 自适应平均池化：括号内是输出尺寸1*1：相当于全剧平均池化;对每个特征图，累加所有像素值并求平均;减少参数数量，减少计算量，减少过拟合
-                                             nn.Conv2d(inplanes, 256, 1, stride=1, bias=False),  # -> [batch, 256, h, w]
-                                             BatchNorm(256),
-                                             nn.ReLU())  # -> [batch, 256, h, w]
-        self.conv1 = nn.Conv2d(1280, 256, 1, bias=False)  # -> [batch, 256, h, w]
-        self.bn1 = BatchNorm(256)
+        self.conv1 = nn.Conv2d(inplanes + 256 * 3, 256, 1, bias=False)  # -> [batch, 256, h, w]
+        self.bn1 = nn.BatchNorm2d(256)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(0.5)  # Dropout:丢掉   表示每个神经元有0.5的可能性不被激活   p为元素被置0的概率，即被‘丢’掉的概率
         self._init_weight()
@@ -67,12 +55,7 @@ class ASPP(nn.Module):
         x1 = self.aspp1(x)  # ->[1, 256, 32, 32]
         x2 = self.aspp2(x)  # ->[1, 256, 32, 32]
         x3 = self.aspp3(x)  # ->[1, 256, 32, 32]
-        x4 = self.aspp4(x)  # ->[1, 256, 32, 32]
-        x5 = self.global_avg_pool(x)  # ->[1,256,1,1] 全局平均池化 256个1*1的矩阵
-        x5 = F.interpolate(x5, size=x4.size()[2:], mode='bilinear', align_corners=True)  # ->[1,256,32,32]  把256个1*1矩阵数值copy成32*32
-            # align_corners：设置为True，则输入和输出张量由其角像素的中心点对齐，从而保留角像素处的值。
-            # bilinear：双线性插值  x4.size()[2:]:按照x4的第三维第四维的尺寸大小（32，32）
-        x = torch.cat((x1, x2, x3, x4, x5), dim=1)  # 将两个张量（tensor）拼接在一起,按维数（1）列对齐 torch.Size([1, 1280, 32, 32])
+        x = torch.cat((x1, x2, x3, x), dim=1)  # 将两个张量（tensor）拼接在一起,按维数（1）列对齐 torch.Size([1, 1280, 32, 32])
 
         x = self.conv1(x)  # 改变通道数 -> [1,256,32,32]
         x = self.bn1(x)
@@ -95,4 +78,4 @@ class ASPP(nn.Module):
 
 
 def build_aspp(backbone, output_stride, BatchNorm):
-    return ASPP(backbone, output_stride, BatchNorm)
+    return SeBiFPNASPP(backbone, output_stride, BatchNorm)

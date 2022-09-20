@@ -8,8 +8,8 @@ from tqdm import tqdm
 from mypath import Path
 from dataloaders import make_data_loader
 from newmodeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.deeplab_SeBiFPN_EaNET import *
-from utils.loss import SegmentationLosses
+from newmodeling.compare.deeplab_Sebifpn import *
+from utils.loss_bifpn_Eanet import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
@@ -41,7 +41,7 @@ class Trainer(object):
         # 使用”**”调用函数,这种方式我们需要一个字典.注意:在函数调用中使用”*”，我们需要元组;
 
         # Define network
-        model = DeepLab_SEBIFPN_EaNet(backbone=args.backbone, output_stride=args.out_stride)
+        model = DeepLab_SeBIFPN(backbone=args.backbone, output_stride=args.out_stride)
 
         # 构建一个优化参数列表
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},  # train_params[0]:args.lr = 0.0035
@@ -69,7 +69,7 @@ class Trainer(object):
         else:
             weight = None  # None
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(
-            mode=args.loss_type)  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
+            mode='focal')  # weight：None cuda:true loss_type='ce'(交叉熵损失函数)
         self.model, self.optimizer = model, optimizer
 
         # Define Evaluator
