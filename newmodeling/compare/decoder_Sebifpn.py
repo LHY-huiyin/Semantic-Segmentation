@@ -1,9 +1,4 @@
-import math
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from newmodeling.attention.sebiASPP import *
+from newmodeling.newidea.sebiASPP import *
 
 
 class ConvBNReLU(nn.Module):
