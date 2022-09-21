@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.backbone import build_backbone
-from modeling.decoder_sebifpn_eanet import *
+from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from newmodeling.backbone import build_backbone
+from newmodeling.compare.decoder_version1_nochannel import *
 from configs import config_factory
 
 cfg = config_factory['resnet_cityscapes']
@@ -168,8 +168,6 @@ class LKPP(nn.Module):
 
 
 "总体架构"
-
-
 class DeepLab_SEBIFPN_EaNet(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=8,
                  sync_bn=True, freeze_bn=False):

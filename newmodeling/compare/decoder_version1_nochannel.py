@@ -2,8 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.PPM import *
+from newmodeling.newidea.sebiASPP import *
 
 
 class ConvBNReLU(nn.Module):
@@ -163,7 +162,9 @@ class BifpnConvs(nn.Module):
         self.bn = nn.BatchNorm2d(out_chan)
         self.relu = nn.ReLU(inplace=False)
         # self.ppm = PSPModule(in_chan, norm_layer=nn.BatchNorm2d, out_features=256)
-        self.aspp = AsppLuo(in_chan=256, out_chan=256, mode='parallel', with_gp=True)
+        # self.aspp = AsppLuo(in_chan=256, out_chan=256, mode='parallel', with_gp=True)
+        "对比实验中的金字塔改为其他模块"
+        self.sebiaspp = SeBiFPNASPP(in_chan)
         self.init_weight()
 
     def forward(self, x):
@@ -172,7 +173,8 @@ class BifpnConvs(nn.Module):
         x = self.relu(x)
 
         # x = self.ppm(x)
-        x = self.aspp(x)
+        # x = self.aspp(x)
+        x = self.sebiaspp(x)
 
         x = self.conv(x)
         x = self.bn(x)
@@ -212,7 +214,7 @@ class ChannelAttention(nn.Module):
 
 "解码器结构"
 class Decoder_SEBiFPN_EaNet(nn.Module):
-    def __init__(self, n_classes, low_chan=[1024, 512, 256, 64], num_classes=8, levels=4, init=0.5, eps=0.0001, *args, **kwargs):
+    def __init__(self, n_classes, low_chan=[1024, 512, 256, 64], num_classes=8, levels=5, init=0.5, eps=0.0001, *args, **kwargs):
         super(Decoder_SEBiFPN_EaNet, self).__init__()
         self.eps = eps
         self.levels = levels
@@ -270,51 +272,34 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         feat2_3 = self.conv_2_BR(feat2)  # [4,64,192,192] -> [4,256,192,192]
 
         "sebifpn"
-        # w1 = self.relu1(self.w1)  # [2,4]
-        # w1 = w1 / torch.sum(w1, dim=0) + self.eps
-        # w2 = self.relu2(self.w2)  # [3,3]
-        # w2 = w2 / torch.sum(w2, dim=0) + self.eps
-        "采用门控的权重分配形式"
+        w1 = self.relu1(self.w1)  # [2,4]
+        w1 = w1 / torch.sum(w1, dim=0) + self.eps
+        w2 = self.relu2(self.w2)  # [3,3]
+        w2 = w2 / torch.sum(w2, dim=0) + self.eps
+        "对比实验：固定权重"
         "调整为自上而下的融合方式,以获得更多的深层特征"
         "5融合模式：将层6的特征图双线性插值得到feat_lkpp,然后与feat16_1 concat"
-        # 将feat_lkpp与feat16_1进行concat,然后进行卷积(1*1,3*3),sigmoid,全局平均池化,得到权重
-        # feat16_w = torch.nn.functional.adaptive_avg_pool2d(
-        #     self.sigmoid(self.conv_cat2(self.conv_cat1(torch.cat((feat_lkpp_up, feat16_1), dim=1)))), (1, 1))
-        feat16_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat_lkpp_up, feat16_1), dim=1)), (1, 1))
-
         # 将权重应用于特征融合
-        feat16_fuse1 = feat16_w * feat_lkpp_up + feat16_1 * (1 - feat16_w)
+        feat16_fuse1 = (w1[0,0] * feat_lkpp_up + feat16_1 * (1 - w1[1, 0])) / (w1[0, 0] + w1[1, 0] + self.eps)
         # 经过1*1卷积,以及多尺度特征融合模块,最后经过1*1卷积,便是sebifpn的完整过程
         feat16_fuse1 = self.bifpn_convs(feat16_fuse1)
 
         "4融合模式：将层5的特征图双线性插值得到feat16_fuse1_up,然后与feat8_1 concat"
         H, W = feat8_1.size()[2:]
         feat16_fuse1_up = F.interpolate(feat16_fuse1, (H, W), mode='bilinear')
-        # feat8_w = torch.nn.functional.adaptive_avg_pool2d(
-        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
-        #         torch.cat((feat16_fuse1_up, feat8_1), dim=1)))), (1, 1))
-        feat8_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat16_fuse1_up, feat8_1), dim=1)), (1,1))
-        feat8_fuse1 = feat8_w * feat16_fuse1_up + feat8_1 * (1 - feat8_w)
+        feat8_fuse1 = w1[0, 1] * feat16_fuse1_up + feat8_1 * w1[1, 1]
         feat8_fuse1 = self.bifpn_convs(feat8_fuse1)
 
         "3融合模式：将层4的特征图双线性插值得到feat8_fuse1_up,然后与feat4_1 concat"
         H, W = feat4_1.size()[2:]
         feat8_fuse1_up = F.interpolate(feat8_fuse1, (H, W), mode='bilinear')
-        # feat4_w = torch.nn.functional.adaptive_avg_pool2d(
-        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
-        #         torch.cat((feat8_fuse1_up, feat4_1), dim=1)))), (1, 1))
-        feat4_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat8_fuse1_up, feat4_1), dim=1)), (1, 1))
-        feat4_fuse1 = feat4_w * feat8_fuse1_up + feat4_1 * (1 - feat4_w)
+        feat4_fuse1 = w1[0, 2] * feat8_fuse1_up + feat4_1 * w1[1, 2]
         feat4_fuse1 = self.bifpn_convs(feat4_fuse1)
 
         "2融合模式：将层4的特征图双线性插值得到feat4_fuse1_up,然后与feat2_1 concat"
         H, W = feat2_1.size()[2:]
         feat4_fuse1_up = F.interpolate(feat4_fuse1, (H, W), mode='bilinear')
-        # feat2_w = torch.nn.functional.adaptive_avg_pool2d(
-        #     self.sigmoid(self.conv_cat2(self.conv_cat1(
-        #         torch.cat((feat4_fuse1_up, feat2_1), dim=1)))), (1, 1))
-        feat2_w = torch.nn.functional.adaptive_avg_pool2d(self.conv_cat_group(torch.cat((feat4_fuse1_up, feat2_1), dim=1)), (1, 1))
-        feat2_fuse1 = feat2_w * feat4_fuse1_up + feat2_1 * (1 - feat2_w)
+        feat2_fuse1 = w1[0, 3] * feat4_fuse1_up + feat2_1 * w2[1, 3]
         feat2_fuse1 = self.bifpn_convs(feat2_fuse1)
 
         # ****************************************************自下而上#
@@ -322,12 +307,8 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         # 门控的实现：经过nn.Conv2d(256, 1, kernel_size=1)，以及sigmoid函数，作为一个权重
         "3融合模式：将层4的特征图进行门控权重的融合，其中，令feat4_fuse1为主，将feat2_fuse1进行最大池化后与feat4_1进行两个特征图的门控方式的融合"
         "之后，仍旧按照门控融合的方法进行两个特征图的融合权证配比（与上同）"
-        gate_feat4 = self.sigmoid(self.gate_conv(feat4_fuse1))
-        gate_feat4_other = self.sigmoid(self.gate_conv(feat4_1)) * feat4_1 + self.sigmoid(
-            self.gate_conv(F.max_pool2d(feat2_fuse1, kernel_size=2))) * F.max_pool2d(feat2_fuse1, kernel_size=2)
-        feat4_fuse2 = gate_feat4 * feat4_fuse1 + (1 - gate_feat4) * gate_feat4_other  # 此处搞错了，门控融合：应该是（1-G）（1+G）
+        feat4_fuse2 = w2[0, 0] * feat4_fuse1 + w2[1, 0] * F.max_pool2d(feat2_fuse1, kernel_size=2) + w2[2, 0] * feat4_1
         feat4_fuse2 = self.bifpn_convs(feat4_fuse2)
-        # feat4_loss = self.conv_loss(feat4_fuse2)
 
         "4融合模式：将层5的特征图进行门控权重的融合，其中，令feat8_fuse1为主，将feat4_fuse1进行最近邻后与feat8_1进行两个特征图的门控方式的融合"
         "之后，仍旧按照门控融合的方法进行两个特征图的融合权证配比（与上同）"
@@ -336,20 +317,15 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         gate_feat8 = self.sigmoid(self.gate_conv(feat8_fuse1))
         gate_feat8_other = self.sigmoid(self.gate_conv(feat8_1)) * feat8_1 + self.sigmoid(
             self.gate_conv(feat4_fuse2_up)) * feat4_fuse2_up
-        feat8_fuse2 = gate_feat8 * feat8_fuse1 + (1 - gate_feat8) * gate_feat8_other
+        feat8_fuse2 = w2[0, 1] * feat8_fuse1 + w2[1, 1] * feat8_1 + w2[2, 1] * feat4_fuse2_up
         feat8_fuse2 = self.bifpn_convs(feat8_fuse2)
-        # feat8_loss = self.conv_loss(feat8_fuse2)
 
         "5融合模式：将层6的特征图进行门控权重的融合，其中，令feat8_fuse1为主，将feat8_fuse1进行最近邻后与feat16_1进行两个特征图的门控方式的融合"
         "之后，仍旧按照门控融合的方法进行两个特征图的融合权证配比（与上同）"
         H, W = feat16_1.size()[2:]
         feat8_fuse2_up = F.interpolate(feat8_fuse2, (H, W), mode='nearest')
-        gate_feat16 = self.sigmoid(self.gate_conv(feat16_fuse1))
-        gate_feat16_other = self.sigmoid(self.gate_conv(feat16_1)) * feat16_1 + self.sigmoid(
-            self.gate_conv(feat8_fuse2_up)) * feat8_fuse2_up
-        feat16_fuse2 = gate_feat16 * feat16_fuse1 + (1 - gate_feat16) * gate_feat16_other
+        feat16_fuse2 = w2[0, 2] * feat16_fuse1 + w2[1, 2] * feat16_1 + w2[2, 2] * feat8_fuse2_up
         feat16_fuse2 = self.bifpn_convs(feat16_fuse2)
-        # feat16_loss = self.conv_loss(feat16_fuse2)
 
         # ****************************************************自上而下#
         "上采样"
