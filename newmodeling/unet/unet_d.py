@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 from modeling.damm_cam_pam import build_damm
 from modeling.point_flow import PointFlowModuleWithMaxAvgpool
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from modeling.unet.unet_parts import *
+from newmodeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from newmodeling.unet.unet_parts import *
 
 
 class UNet(nn.Module):
