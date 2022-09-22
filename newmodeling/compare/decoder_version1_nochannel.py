@@ -287,19 +287,19 @@ class Decoder_SEBiFPN_EaNet(nn.Module):
         "4融合模式：将层5的特征图双线性插值得到feat16_fuse1_up,然后与feat8_1 concat"
         H, W = feat8_1.size()[2:]
         feat16_fuse1_up = F.interpolate(feat16_fuse1, (H, W), mode='bilinear')
-        feat8_fuse1 = w1[0, 1] * feat16_fuse1_up + feat8_1 * w1[1, 1]
+        feat8_fuse1 = w1[0, 1] * feat16_fuse1_up + feat8_1 * w1[1, 1] / (w1[0, 1] + w1[1, 1] + self.eps)
         feat8_fuse1 = self.bifpn_convs(feat8_fuse1)
 
         "3融合模式：将层4的特征图双线性插值得到feat8_fuse1_up,然后与feat4_1 concat"
         H, W = feat4_1.size()[2:]
         feat8_fuse1_up = F.interpolate(feat8_fuse1, (H, W), mode='bilinear')
-        feat4_fuse1 = w1[0, 2] * feat8_fuse1_up + feat4_1 * w1[1, 2]
+        feat4_fuse1 = w1[0, 2] * feat8_fuse1_up + feat4_1 * w1[1, 2] / (w1[0, 2] + w1[1, 2] + self.eps)
         feat4_fuse1 = self.bifpn_convs(feat4_fuse1)
 
         "2融合模式：将层4的特征图双线性插值得到feat4_fuse1_up,然后与feat2_1 concat"
         H, W = feat2_1.size()[2:]
         feat4_fuse1_up = F.interpolate(feat4_fuse1, (H, W), mode='bilinear')
-        feat2_fuse1 = w1[0, 3] * feat4_fuse1_up + feat2_1 * w2[1, 3]
+        feat2_fuse1 = w1[0, 3] * feat4_fuse1_up + feat2_1 * w2[1, 3] / (w1[0, 3] + w1[1, 3] + self.eps)
         feat2_fuse1 = self.bifpn_convs(feat2_fuse1)
 
         # ****************************************************自下而上#
