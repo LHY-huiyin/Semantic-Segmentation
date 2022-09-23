@@ -1,300 +1,240 @@
-# Original code and checkpoints by Hang Zhang
-# https://github.com/zhanghang1989/PyTorch-Encoding
-
-
-import math
+ # https://github.com/chen-zhoujian/SegNet-pytorch
 import torch
-import os
-import sys
-import zipfile
-import shutil
-import torch.utils.model_zoo as model_zoo
 import torch.nn as nn
-try:
-    from urllib import urlretrieve
-except ImportError:
-    from urllib.request import urlretrieve
-
-__all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
-           'resnet152', 'BasicBlock', 'Bottleneck']
-
-model_urls = {
-    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
-    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
-    'resnet50': 'https://s3.us-west-1.wasabisys.com/encoding/models/resnet50s-a75c83cf.zip',
-    'resnet101': 'https://s3.us-west-1.wasabisys.com/encoding/models/resnet101s-03a0f310.zip',
-    'resnet152': 'https://s3.us-west-1.wasabisys.com/encoding/models/resnet152s-36670e8b.zip'
-}
+import torch.nn.functional as F
+import cv2 as cv
+import numpy as np
+from PIL import Image
+import torch.utils.data as Data
+import os
+import time
+import argparse
 
 
-def conv3x3(in_planes, out_planes, stride=1):
-    "3x3 convolution with padding"
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+bn_momentum = 0.1  # BN层的momentum
+torch.cuda.manual_seed(1)  # 设置随机种子
 
+# 编码器
+class Encoder(nn.Module):
+    def __init__(self, input_channels):
+        super(Encoder, self).__init__()
 
-class BasicBlock(nn.Module):
-    """ResNet BasicBlock
-    """
-    expansion = 1
-    def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None, previous_dilation=1,
-                 norm_layer=None):
-        super(BasicBlock, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=3, stride=stride,
-                               padding=dilation, dilation=dilation, bias=False)
-        self.bn1 = norm_layer(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1,
-                               padding=previous_dilation, dilation=previous_dilation, bias=False)
-        self.bn2 = norm_layer(planes)
-        self.downsample = downsample
-        self.stride = stride
-
-    def forward(self, x):
-        residual = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        out += residual
-        out = self.relu(out)
-
-        return out
-
-
-class Bottleneck(nn.Module):
-    """ResNet Bottleneck
-    """
-    # pylint: disable=unused-argument
-    expansion = 4
-    def __init__(self, inplanes, planes, stride=1, dilation=1,
-                 downsample=None, previous_dilation=1, norm_layer=None):
-        super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn1 = norm_layer(planes)
-        self.conv2 = nn.Conv2d(
-            planes, planes, kernel_size=3, stride=stride,
-            padding=dilation, dilation=dilation, bias=False)
-        self.bn2 = norm_layer(planes)
-        self.conv3 = nn.Conv2d(
-            planes, planes * 4, kernel_size=1, bias=False)
-        self.bn3 = norm_layer(planes * 4)
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-        self.dilation = dilation
-        self.stride = stride
-
-    def _sum_each(self, x, y):
-        assert(len(x) == len(y))
-        z = []
-        for i in range(len(x)):
-            z.append(x[i]+y[i])
-        return z
+        self.enco1 = nn.Sequential(
+            nn.Conv2d(input_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.enco2 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.enco3 = nn.Sequential(
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.enco4 = nn.Sequential(
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.enco5 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU()
+        )
 
     def forward(self, x):
-        residual = x
+        id = []
 
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
+        x = self.enco1(x)
+        x, id1 = F.max_pool2d(x, kernel_size=2, stride=2, return_indices=True)  # 保留最大值的位置
+        id.append(id1)
+        x = self.enco2(x)
+        x, id2 = F.max_pool2d(x, kernel_size=2, stride=2, return_indices=True)
+        id.append(id2)
+        x = self.enco3(x)
+        x, id3 = F.max_pool2d(x, kernel_size=2, stride=2, return_indices=True)
+        id.append(id3)
+        x = self.enco4(x)
+        x, id4 = F.max_pool2d(x, kernel_size=2, stride=2, return_indices=True)
+        id.append(id4)
+        x = self.enco5(x)
+        x, id5 = F.max_pool2d(x, kernel_size=2, stride=2, return_indices=True)
+        id.append(id5)
 
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-
-        out = self.conv3(out)
-        out = self.bn3(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        out += residual
-        out = self.relu(out)
-
-        return out
+        return x, id
 
 
-class ResNet(nn.Module):
-    """Dilated Pre-trained ResNet Model, which preduces the stride of 8 featuremaps at conv5.
-    Reference:
-        - He, Kaiming, et al. "Deep residual learning for image recognition." CVPR. 2016.
-        - Yu, Fisher, and Vladlen Koltun. "Multi-scale context aggregation by dilated convolutions."
-    """
-    # pylint: disable=unused-variable
-    def __init__(self, block, layers, num_classes=1000, dilated=True, multi_grid=False,
-                 deep_base=True, norm_layer=nn.BatchNorm2d):
-        self.inplanes = 128 if deep_base else 64
-        super(ResNet, self).__init__()
-        if deep_base:
-            self.conv1 = nn.Sequential(
-                nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1, bias=False),
-                norm_layer(64),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
-                norm_layer(64),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            )
-        else:
-            self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                                   bias=False)
-        self.bn1 = norm_layer(self.inplanes)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0], norm_layer=norm_layer)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, norm_layer=norm_layer)
-        if dilated:
-            self.layer3 = self._make_layer(block, 256, layers[2], stride=1,
-                                           dilation=2, norm_layer=norm_layer)
-            if multi_grid:
-                self.layer4 = self._make_layer(block, 512, layers[3], stride=1,
-                                               dilation=4, norm_layer=norm_layer,
-                                               multi_grid=True)
-            else:
-                self.layer4 = self._make_layer(block, 512, layers[3], stride=1,
-                                               dilation=4, norm_layer=norm_layer)
-        else:
-            self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
-                                           norm_layer=norm_layer)
-            self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
-                                           norm_layer=norm_layer)
-        self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+# 编码器+解码器
+class SegNet(nn.Module):
+    def __init__(self, input_channels, output_channels):
+        super(SegNet, self).__init__()
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, norm_layer):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+        self.weights_new = self.state_dict()
+        self.encoder = Encoder(input_channels)
 
-    def _make_layer(self, block, planes, blocks, stride=1, dilation=1, norm_layer=None, multi_grid=False):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
-                norm_layer(planes * block.expansion),
-            )
-
-        layers = []
-        multi_dilations = [4, 8, 16]
-        if multi_grid:
-            layers.append(block(self.inplanes, planes, stride, dilation=multi_dilations[0],
-                                downsample=downsample, previous_dilation=dilation, norm_layer=norm_layer))
-        elif dilation == 1 or dilation == 2:
-            layers.append(block(self.inplanes, planes, stride, dilation=1,
-                                downsample=downsample, previous_dilation=dilation, norm_layer=norm_layer))
-        elif dilation == 4:
-            layers.append(block(self.inplanes, planes, stride, dilation=2,
-                                downsample=downsample, previous_dilation=dilation, norm_layer=norm_layer))
-        else:
-            raise RuntimeError("=> unknown dilation size: {}".format(dilation))
-
-        self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
-            if multi_grid:
-                layers.append(block(self.inplanes, planes, dilation=multi_dilations[i],
-                                    previous_dilation=dilation, norm_layer=norm_layer))
-            else:
-                layers.append(block(self.inplanes, planes, dilation=dilation, previous_dilation=dilation,
-                                    norm_layer=norm_layer))
-
-        return nn.Sequential(*layers)
+        self.deco1 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.deco2 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.deco3 = nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.deco4 = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64, momentum=bn_momentum),
+            nn.ReLU()
+        )
+        self.deco5 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64, momentum=bn_momentum),
+            nn.ReLU(),
+            nn.Conv2d(64, output_channels, kernel_size=3, stride=1, padding=1),
+        )
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+        x, id = self.encoder(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = F.max_unpool2d(x, id[4], kernel_size=2, stride=2)
+        x = self.deco1(x)
+        x = F.max_unpool2d(x, id[3], kernel_size=2, stride=2)
+        x = self.deco2(x)
+        x = F.max_unpool2d(x, id[2], kernel_size=2, stride=2)
+        x = self.deco3(x)
+        x = F.max_unpool2d(x, id[1], kernel_size=2, stride=2)
+        x = self.deco4(x)
+        x = F.max_unpool2d(x, id[0], kernel_size=2, stride=2)
+        x = self.deco5(x)
 
         return x
 
+    # 删掉VGG-16后面三个全连接层的权重
+    def load_weights(self, weights_path):
+        weights = torch.load(weights_path)
+        del weights["classifier.0.weight"]
+        del weights["classifier.0.bias"]
+        del weights["classifier.3.weight"]
+        del weights["classifier.3.bias"]
+        del weights["classifier.6.weight"]
+        del weights["classifier.6.bias"]
 
-def resnet18(pretrained=False, **kwargs):
-    """Constructs a ResNet-18 model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(BasicBlock, [2, 2, 2, 2], deep_base=False, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
-    return model
+        # 更改权重值，先将原权重的名字存放在names中，
+        names = []
+        for key, value in self.encoder.state_dict().items():
+            if "num_batches_tracked" in key:
+                continue
+            names.append(key)
 
+        # 再从预训练权重取值，最后进行存放在new_weight中，
+        for name, dict in zip(names, weights.items()):
+            self.weights_new[name] = dict[1]
 
-def resnet34(pretrained=False, **kwargs):
-    """Constructs a ResNet-34 model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(BasicBlock, [3, 4, 6, 3], deep_base=False, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
-    return model
-
-
-def resnet50(pretrained=False, root='./pretrained', **kwargs):
-    """Constructs a ResNet-50 model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(load_url(model_urls['resnet50'], model_dir=root))
-    return model
+        # 并更新
+        self.encoder.load_state_dict(self.weights_new)
 
 
-def resnet101(pretrained=False, root='./pretrained', **kwargs):
-    """Constructs a ResNet-101 model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(Bottleneck, [3, 4, 23, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(load_url(model_urls['resnet101'], model_dir=root))
-    return model
+class MyDataset(Data.Dataset):
+    def __init__(self, txt_file, image_file, label_file):   # txt_path：'G:\\LoveDA\\ImageSets\\Segmentation\\train.txt'
+        super(MyDataset, self).__init__()
 
+        # 读取txt文档的内容
+        f_read1 = open(txt_file, "r")  # 打开文件
+        # f_read2 = f_read1.read()  # 1367\n1368\n1369\n1370\n1371....
+        f_read2 = f_read1.readlines()  # 读取文件的内容
+        f_read3 = [line.strip('\n').split() for line in f_read2]  # 去除收尾的回车符，并按照空格进行分割
 
-def resnet152(pretrained=False, root='./pretrained', **kwargs):
-    """Constructs a ResNet-152 model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
-    if pretrained:
-        model.load_state_dict(load_url(model_urls['resnet152'], model_dir=root))
-    return model
+        # image_label = []
+        # for line in paths:
+        #     line.rstrip("\n")
+        #     line.lstrip("\n")
+        #     path = line.split()
+        #     image_label.append((path[0], path[1]))
 
+        # self.image_label = image_label
 
-def load_url(url, model_dir='./pretrained', map_location=None):
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
-    filename = url.split('/')[-1].split('.')[0]
-    cached_file = os.path.join(model_dir, filename+'.pth')
-    if not os.path.exists(cached_file):
-        cached_file = os.path.join(model_dir, filename+'.zip')
-        sys.stderr.write('Downloading: "{}" to {}\n'.format(url, cached_file))
-        urlretrieve(url, cached_file)
-        zip_ref = zipfile.ZipFile(cached_file, 'r')
-        zip_ref.extractall(model_dir)
-        zip_ref.close()
-        os.remove(cached_file)
-        cached_file = os.path.join(model_dir, filename+'.pth')
-    return torch.load(cached_file, map_location=map_location)
+        image_list = []
+        label_list = []
+        for i in range(len(f_read3)):
+            m = f_read3[i][0]
+            img_path = os.path.join(image_file, m + '.jpg')
+            lab_path = os.path.join(label_file, m + '.png')
+            image_list.append(img_path)
+            label_list.append(lab_path)
+
+        self.image_list = image_list
+        self.label_list = label_list
+
+    def __getitem__(self, item):
+        # image, label = self.image_list[item]
+        image = self.image_list[item]
+        label = self.label_list[item]
+
+        image = cv.imread(image)
+        image = cv.resize(image, (512, 512))
+        image = image/255.0  # 归一化输入
+        image = torch.Tensor(image)
+        image = image.permute(2, 0, 1)  # 将图片的维度转换成网络输入的维度（channel, width, height）
+
+        label = cv.imread(label, 0)
+        label = cv.resize(label, (512, 512))
+        label = torch.Tensor(label)
+
+        return image, label
+
+    def __len__(self):
+        return len(self.image_list)
