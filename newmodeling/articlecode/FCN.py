@@ -82,4 +82,4 @@ net = FCN(12)
 
 out = net(rgb)
 
-print(out.shape)
+# print(out.shape)
