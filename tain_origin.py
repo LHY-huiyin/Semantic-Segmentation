@@ -1,12 +1,14 @@
 import argparse
 import os
+
+import cv2
 import numpy as np
 from tqdm import tqdm
 
 from mypath import Path
 from dataloaders import make_data_loader
-from modeling.sync_batchnorm.replicate import patch_replication_callback
-from modeling.deeplab_origin import *
+from newmodeling.sync_batchnorm.replicate import patch_replication_callback
+from newmodeling.deeplab import *
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
@@ -230,7 +232,7 @@ class Trainer(object):
             }, is_best)
 
         # 保存文件
-        with codecs.open('实验记录resnet101_Vaihingen_参数调整.txt', 'a', 'utf-8') as f:
+        with codecs.open('对比实验Deeplabv3.txt', 'a', 'utf-8') as f:
             f.write("训练集：" + str(Path.db_root_dir) + "\n")
             f.write("epoch : " + str(epoch) + "\n")
             # f.write("lr : " + str(lr) + "\n")
@@ -249,10 +251,10 @@ class Trainer(object):
         # 数据加载器中数据的维度是[B, C, H, W]，我们每次只拿一个数据出来就是[C, H, W]，而matplotlib.pyplot.imshow要求的输入维度是[H, W, C]，
         # 所以我们需要交换一下数据维度，把通道数放到最后面，这里用到pytorch里面的permute方法（transpose方法也行，不过要交换两次，没这个方便，numpy中的transpose方法倒是可以一次交换完成）
         # 将tensor的维度换位。RGB->BGR  permute(1, 2, 0)
-        if new_pred >= 0.75:  # MIOU
+        if new_pred >= 0.51:  # MIOU
             for i, sample in enumerate(tbar):
-                if i > 5:
-                    break
+                # if i > 5:
+                #     break
                 image, target = sample['image'], sample['label']
                 if self.args.cuda:
                     image, target = image.cuda(), target.cuda()
@@ -265,15 +267,20 @@ class Trainer(object):
                 # pred = decode_segmap(pred, dataset='pascal')
 
                 # 从这里开始
-                plt.figure(figsize=(25, 25))
-                for j in range(4):
+                # plt.figure(figsize=(25, 25))
+                for j in range(32):
                     # print(pred[i].shape)     #(512, 512)
-                    plt.subplot(2, 2, j + 1)  # 需要注意的是所有的数字不能超过10
+                    # plt.subplot(2, 2, j + 1)  # 需要注意的是所有的数字不能超过10
                     tmp = np.array(pred[j]).astype(np.uint8)  # (512,512)
                     segmap = decode_segmap(tmp, dataset='pascal')  # (3, 512, 512)
-                    plt.imshow(segmap)  # ([256, 256, 1])
-                    plt.axis('off')
-                plt.show()
+                    "opencv保存彩色图片"
+                    image_name = "./RESULT/Deeplabv3/" + str(i) + '_' + str(j) + '.jpg'
+                    segmap = segmap[:, :, ::-1] * 255
+                    segmap = segmap.astype(np.uint8)
+                    cv2.imwrite(image_name, segmap)
+                    # plt.imshow(segmap)  # ([256, 256, 1])
+                    # plt.axis('off')
+                # plt.show()
 
 
 def main():

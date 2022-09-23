@@ -1,8 +1,9 @@
-from newmodeling.backbone import resnet101_5, resnet101_4
+from newmodeling.backbone import resnet101_5, resnet101_4, resnet101_2
 
 def build_backbone(backbone, output_stride, BatchNorm):  # 'resnet' 16
     if backbone == 'resnet':  # 16
-        return resnet101_5.ResNet101(output_stride, BatchNorm)
+        return resnet101_2.ResNet101(output_stride, BatchNorm)
+        # return resnet101_5.ResNet101(output_stride, BatchNorm)
         # return resnet101_4.ResNet101(output_stride, BatchNorm)
 
         # return resnet101.ResNet101(output_stride, BatchNorm)
