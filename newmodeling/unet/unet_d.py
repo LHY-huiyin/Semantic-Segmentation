@@ -11,11 +11,11 @@ from newmodeling.unet.unet_parts import *
 class UNet(nn.Module):
     # def __init__(self, backbone='resnet', output_stride=16, num_classes=21,
     #              sync_bn=True, freeze_bn=False):
-    def __init__(self, backbone='unet', num_classes=8, bilinear=True, sync_bn=True, freeze_bn=False):
+    def __init__(self, n_channels, num_classes, bilinear=True, sync_bn=True, freeze_bn=False):
         super(UNet, self).__init__()  # 自己搭建的网络Deeplab会继承nn.Module：
 
-        if backbone == 'unet':
-            n_channels = 3
+        # if backbone == 'unet':
+            # n_channels = 3
 
         if sync_bn == True:
             BatchNorm = SynchronizedBatchNorm2d  # 每层进行归一化处理
@@ -23,7 +23,7 @@ class UNet(nn.Module):
             BatchNorm = nn.BatchNorm2d  # 数据的归一化处理   y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
 
 
-        self.n_channels = n_channels
+        # self.n_channels = n_channels
         self.n_classes = num_classes
         self.bilinear = bilinear
 

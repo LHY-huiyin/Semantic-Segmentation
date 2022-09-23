@@ -320,7 +320,7 @@ class RSU4F(nn.Module):#UNet04FRES(nn.Module):
 class U2NET(nn.Module):
 
     def __init__(self, in_ch=3, out_ch=8):
-        super(U2NET,self).__init__()
+        super(U2NET, self).__init__()
 
         self.stage1 = RSU7(in_ch, 32, 64)   # 输出通道数为64，图片尺寸不变
         self.pool12 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 2*2卷积，下采样两倍
